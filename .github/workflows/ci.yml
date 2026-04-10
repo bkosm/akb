@@ -21,4 +21,4 @@ jobs:
         with:
           working-directory: go/akb
           args: --config ../../.golangci.yml
-          version: latest
+          version: v2.11.4
