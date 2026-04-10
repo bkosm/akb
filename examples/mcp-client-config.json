@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "akb-local": {
+      "command": "stdio.sh",
+      "args": ["local"]
+    },
+    "akb-s3": {
+      "command": "stdio.sh",
+      "args": ["s3"]
+    }
+  }
+}
