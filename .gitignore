@@ -1,8 +1,9 @@
 **/*.secret.*
 **/tmp
 **/.aws*
-**/stdio
 bin/akb
+go/akb/stdio
+stdio
 .cursor/
 .codex/
 .mcp.json
