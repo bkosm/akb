@@ -18,5 +18,8 @@ fmt:
 vet:
 	go vet $(GO_MODULE)
 
+integration:
+	go test -race -tags=integration $(GO_MODULE)
+
 clean:
 	rm -f $(BIN)
