@@ -12,6 +12,7 @@ import (
 	"github.com/bkosm/akb/mount"
 )
 
+// Input holds the parameters for the new_kb tool.
 type Input struct {
 	Name         string            `json:"name" jsonschema:"the unique name for this knowledge base"`
 	RcloneRemote string            `json:"rclone_remote,omitempty" jsonschema:"rclone remote path spec. Omit for a plain local directory. Format ':backend,opt=val:bucket/path'. Examples: ':s3,env_auth=true,region=us-east-1:my-bucket/prefix/'. See https://rclone.org/overview/#syntax-of-remote-paths"`
@@ -21,11 +22,13 @@ type Input struct {
 	Description  string            `json:"description,omitempty" jsonschema:"human-readable description of the knowledge base"`
 }
 
+// Output is the response payload for the new_kb tool.
 type Output struct {
 	Mount string `json:"mount" jsonschema:"the resolved local path to use with file tools"`
 	Hint  string `json:"hint" jsonschema:"a hint to the user"`
 }
 
+// Handle implements the new_kb tool handler.
 func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, Output, error) {
 	if input.Name == "" {
 		return nil, Output{}, fmt.Errorf("name is required")
@@ -116,16 +119,15 @@ Common backends:
 
 Full backend list: https://rclone.org/overview/#supported-providers`
 
-var boolFalse = false
-
+// Register adds the new_kb tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "new_kb",
 		Title:       "Create Knowledge Base",
 		Description: toolDescription,
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: &boolFalse,
-			OpenWorldHint:   &boolFalse,
+			DestructiveHint: &endpoints.BoolFalse,
+			OpenWorldHint:   &endpoints.BoolFalse,
 		},
 	}, Handle)
 	return nil

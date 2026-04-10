@@ -37,6 +37,7 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 	}, nil
 }
 
+// Register adds the akb://config MCP resource to the server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	s.AddResource(&mcp.Resource{
 		URI:         resourceURI,

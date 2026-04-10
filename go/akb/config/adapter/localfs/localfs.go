@@ -1,3 +1,7 @@
+// Package localfs provides a local filesystem implementation of config.Interface.
+// Config is stored as a JSON file at a configurable path. Env vars in the path
+// are expanded at access time. There is no locking; concurrent writes from
+// multiple processes use last-writer-wins semantics.
 package localfs
 
 import (
@@ -11,6 +15,8 @@ import (
 	"github.com/bkosm/akb/config"
 )
 
+// LocalFS is a config.Interface backed by a JSON file on disk.
+// Path supports environment variable expansion (e.g. $HOME/.config/akb/config.json).
 type LocalFS struct {
 	Path string
 }

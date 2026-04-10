@@ -9,6 +9,7 @@ import (
 	"github.com/bkosm/akb/endpoints"
 )
 
+// Input holds the parameters for the patch_config tool.
 type Input struct {
 	Name         string            `json:"name" jsonschema:"the config key of the KB entry to edit"`
 	RcloneRemote *string           `json:"rclone_remote,omitempty" jsonschema:"new rclone remote path spec. Set empty string to switch to plain local mode. Format ':backend,opt=val:bucket/path'. See https://rclone.org/overview/#syntax-of-remote-paths"`
@@ -18,12 +19,14 @@ type Input struct {
 	Description  *string           `json:"description,omitempty" jsonschema:"new description for the KB"`
 }
 
+// Output is the response payload for the patch_config tool.
 type Output struct {
 	Hint string `json:"hint"`
 }
 
 const savedHint = "Config saved. MCP server restart required for changes to take effect."
 
+// Handle implements the patch_config tool handler.
 func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, Output, error) {
 	configurer, err := config.FromContext(ctx)
 	if err != nil {
@@ -73,8 +76,7 @@ func editKB(cfg *config.Config, input Input) error {
 	return nil
 }
 
-var boolFalse = false
-
+// Register adds the patch_config tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "patch_config",
@@ -85,9 +87,9 @@ Only provided fields are updated; omitted fields are preserved. Works for KB set
 
 Changes are persisted immediately but take full effect after MCP server restart.`,
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: &boolFalse,
+			DestructiveHint: &endpoints.BoolFalse,
 			IdempotentHint:  true,
-			OpenWorldHint:   &boolFalse,
+			OpenWorldHint:   &endpoints.BoolFalse,
 		},
 	}, Handle)
 	return nil

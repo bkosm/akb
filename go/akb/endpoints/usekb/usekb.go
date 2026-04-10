@@ -12,16 +12,19 @@ import (
 	"github.com/bkosm/akb/mount"
 )
 
+// Input holds the parameters for the use_kb tool.
 type Input struct {
 	Name   string `json:"name" jsonschema:"name of the knowledge base to mount or unmount"`
 	Action string `json:"action" jsonschema:"'mount' to activate the KB, 'unmount' to deactivate it"`
 }
 
+// Output is the response payload for the use_kb tool.
 type Output struct {
 	Mount  string `json:"mount" jsonschema:"resolved local path"`
 	Status string `json:"status" jsonschema:"result of the action"`
 }
 
+// Handle implements the use_kb tool handler.
 func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, Output, error) {
 	if input.Name == "" {
 		return nil, Output{}, fmt.Errorf("name is required")
@@ -106,17 +109,16 @@ Actions:
 
 Local KBs (no rclone_remote) are always accessible — both actions are no-ops.`
 
-var boolFalse = false
-
+// Register adds the use_kb tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "use_kb",
 		Title:       "Mount / Unmount Knowledge Base",
 		Description: toolDescription,
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: &boolFalse,
+			DestructiveHint: &endpoints.BoolFalse,
 			IdempotentHint:  true,
-			OpenWorldHint:   &boolFalse,
+			OpenWorldHint:   &endpoints.BoolFalse,
 		},
 	}, Handle)
 	return nil

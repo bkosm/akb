@@ -13,8 +13,10 @@ import (
 	"github.com/bkosm/akb/mount"
 )
 
+// Input holds the parameters for the list_kbs tool (none required).
 type Input struct{}
 
+// KBInfo describes a single knowledge base entry in the list response.
 type KBInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -23,10 +25,12 @@ type KBInfo struct {
 	Mounted     bool   `json:"mounted"`
 }
 
+// Output is the response payload for the list_kbs tool.
 type Output struct {
 	KBs []KBInfo `json:"kbs"`
 }
 
+// Handle implements the list_kbs tool handler.
 func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, Output, error) {
 	configurer, err := config.FromContext(ctx)
 	if err != nil {
@@ -65,8 +69,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 	return nil, Output{KBs: kbs}, nil
 }
 
-var boolFalse = false
-
+// Register adds the list_kbs tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_kbs",
@@ -78,8 +81,8 @@ Each KB entry includes a mount path and a mounted flag. All KBs are auto-mounted
 If a KB shows mounted=false, it may have failed to mount at startup — use use_kb to retry.`,
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
-			OpenWorldHint:   &boolFalse,
-			DestructiveHint: &boolFalse,
+			OpenWorldHint:   &endpoints.BoolFalse,
+			DestructiveHint: &endpoints.BoolFalse,
 		},
 	}, Handle)
 	return nil

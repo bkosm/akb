@@ -123,7 +123,7 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		}
 	}
 
-	run, cleanup, err := mgr.ServeSetup(cfg.KBs, func(name, mountPath string) func() {
+	startMounts, cleanup, err := mgr.ServeSetup(cfg.KBs, func(name, mountPath string) func() {
 		stop, err := prompt.RegisterForKB(server, name, mountPath)
 		if err != nil {
 			log.Printf("prompts: register for kb %q: %v", name, err)
@@ -135,7 +135,7 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		return err
 	}
 	defer cleanup()
-	go run()
+	go startMounts()
 
 	return server.Run(ctx, transport)
 }

@@ -17,6 +17,9 @@ import (
 	"github.com/bkosm/akb/config"
 )
 
+// S3 is a config.Interface backed by an S3 object. It uses If-Match / ETag
+// for optimistic concurrency control; concurrent saves from different processes
+// detect conflicts and return config.ErrConflict.
 type S3 struct {
 	bucket string
 	key    string
