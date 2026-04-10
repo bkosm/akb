@@ -7,11 +7,10 @@ linters:
     - staticcheck
     - gocritic
     - godot
-
-linters-settings:
-  godot:
-    scope: declarations
-    period: true
+  settings:
+    godot:
+      scope: declarations
+      period: true
 
 formatters:
   enable:
