@@ -2,6 +2,7 @@
 **/tmp
 **/.aws*
 **/stdio
+bin/akb
 .cursor/
 .codex/
 .mcp.json
