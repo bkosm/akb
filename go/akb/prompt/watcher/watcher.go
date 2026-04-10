@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -30,9 +29,7 @@ type Watcher struct {
 	rootDir string
 	suffix  string
 	cb      Callback
-
-	mu   sync.Mutex
-	done chan struct{}
+	done    chan struct{}
 }
 
 // Watch starts monitoring dir recursively for files matching suffix.
@@ -53,7 +50,7 @@ func Watch(dir, suffix string, cb Callback) (*Watcher, error) {
 	}
 
 	if err := w.addRecursive(dir); err != nil {
-		fsw.Close()
+		_ = fsw.Close()
 		return nil, err
 	}
 
@@ -96,7 +93,7 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 
 	if ev.Has(fsnotify.Create) {
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
-			w.addRecursive(path)
+			_ = w.addRecursive(path)
 			return
 		}
 	}
@@ -123,6 +120,6 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 
 // Stop closes the watcher and waits for the event loop to exit.
 func (w *Watcher) Stop() {
-	w.fsw.Close()
+	_ = w.fsw.Close()
 	<-w.done
 }

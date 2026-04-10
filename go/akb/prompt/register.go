@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/prompt/watcher"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // RegisterForKB discovers .prompt.md files in mountPath, registers them as

@@ -59,7 +59,9 @@ func TestWatch_createFile(t *testing.T) {
 	defer w.Stop()
 
 	path := filepath.Join(dir, "hello.prompt.md")
-	os.WriteFile(path, []byte("Hello!"), 0o644)
+	if err := os.WriteFile(path, []byte("Hello!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	events := waitFor(t, col, 1, 5*time.Second)
 	found := false
@@ -79,7 +81,9 @@ func TestWatch_modifyFile(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.prompt.md")
-	os.WriteFile(path, []byte("v1"), 0o644)
+	if err := os.WriteFile(path, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	col := &eventCollector{}
 	w, err := Watch(dir, testSuffix, col.handle)
@@ -89,7 +93,9 @@ func TestWatch_modifyFile(t *testing.T) {
 	defer w.Stop()
 
 	time.Sleep(100 * time.Millisecond)
-	os.WriteFile(path, []byte("v2"), 0o644)
+	if err := os.WriteFile(path, []byte("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	events := waitFor(t, col, 1, 5*time.Second)
 	found := false
@@ -109,7 +115,9 @@ func TestWatch_deleteFile(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "gone.prompt.md")
-	os.WriteFile(path, []byte("bye"), 0o644)
+	if err := os.WriteFile(path, []byte("bye"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	col := &eventCollector{}
 	w, err := Watch(dir, testSuffix, col.handle)
@@ -119,7 +127,9 @@ func TestWatch_deleteFile(t *testing.T) {
 	defer w.Stop()
 
 	time.Sleep(100 * time.Millisecond)
-	os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 
 	events := waitFor(t, col, 1, 5*time.Second)
 	found := false
@@ -147,9 +157,13 @@ func TestWatch_newSubdirectory(t *testing.T) {
 	defer w.Stop()
 
 	sub := filepath.Join(dir, "sub")
-	os.MkdirAll(sub, 0o755)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(200 * time.Millisecond)
-	os.WriteFile(filepath.Join(sub, "nested.prompt.md"), []byte("Nested!"), 0o644)
+	if err := os.WriteFile(filepath.Join(sub, "nested.prompt.md"), []byte("Nested!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	events := waitFor(t, col, 1, 5*time.Second)
 	found := false
@@ -176,8 +190,12 @@ func TestWatch_ignoresNonMatchingFiles(t *testing.T) {
 	}
 	defer w.Stop()
 
-	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("Not a prompt"), 0o644)
-	os.WriteFile(filepath.Join(dir, "data.json"), []byte("{}"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "readme.md"), []byte("Not a prompt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "data.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	time.Sleep(500 * time.Millisecond)
 	if got := col.all(); len(got) != 0 {

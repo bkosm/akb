@@ -117,7 +117,7 @@ func (s *testS3) Retrieve(ctx context.Context) (config.Config, error) {
 		}
 		return config.Config{}, fmt.Errorf("get config: %w", err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 
 	data, err := io.ReadAll(out.Body)
 	if err != nil {

@@ -99,7 +99,7 @@ func (s *S3) Retrieve(ctx context.Context) (config.Config, error) {
 		}
 		return config.Config{}, fmt.Errorf("get config from s3://%s/%s: %w", s.bucket, s.key, err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 
 	data, err := io.ReadAll(out.Body)
 	if err != nil {

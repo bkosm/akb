@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
 	"github.com/bkosm/akb/endpoints"
 	"github.com/bkosm/akb/mount"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Input holds the parameters for the new_kb tool.

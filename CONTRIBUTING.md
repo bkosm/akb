@@ -40,7 +40,7 @@ All build, test, and lint tasks are available via `make`:
 | `make vet` | Run go vet |
 | `make clean` | Remove compiled binary |
 
-Run `make test` before submitting a PR. Run `make lint` to check for style issues.
+Run `make test` before submitting a PR. Run `make lint` to check for style issues. Run `make vet` and `make fmt` to catch formatting issues early.
 
 ## Code style
 

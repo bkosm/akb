@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
 	"github.com/bkosm/akb/endpoints"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Input holds the parameters for the patch_config tool.

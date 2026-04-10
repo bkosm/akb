@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
 	"github.com/bkosm/akb/mount"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type stubConfigurer struct {

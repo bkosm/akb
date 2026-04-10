@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gocritic
+    - godot
+
+linters-settings:
+  godot:
+    scope: declarations
+    period: true
+
+formatters:
+  enable:
+    - gofmt

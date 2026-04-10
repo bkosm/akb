@@ -20,8 +20,12 @@ func TestDiscover_findsPromptFiles(t *testing.T) {
 	}
 	for rel, content := range files {
 		path := filepath.Join(dir, rel)
-		os.MkdirAll(filepath.Dir(path), 0o755)
-		os.WriteFile(path, []byte(content), 0o644)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	defs, err := Discover(dir)
@@ -66,10 +70,14 @@ func TestDiscover_skipsUnparseableFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	// Valid file
-	os.WriteFile(filepath.Join(dir, "good.prompt.md"), []byte("Hello."), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "good.prompt.md"), []byte("Hello."), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// File with invalid frontmatter
-	os.WriteFile(filepath.Join(dir, "bad.prompt.md"), []byte("---\n: [invalid yaml\n---\nBody."), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "bad.prompt.md"), []byte("---\n: [invalid yaml\n---\nBody."), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	defs, err := Discover(dir)
 	if err != nil {

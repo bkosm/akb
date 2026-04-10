@@ -218,7 +218,7 @@ func (m *Manager) rcloneMount(remote, mountpoint string, method MountMethod, ext
 	}
 
 	// Reap the child in the background so it doesn't become a zombie.
-	go cmd.Wait()
+	go func() { _ = cmd.Wait() }()
 
 	return cmd, nil
 }
@@ -250,17 +250,18 @@ func (m *Manager) doUnmount(e *entry) error {
 
 	var umountErr error
 
-	if runtime.GOOS == "darwin" {
+	switch {
+	case runtime.GOOS == "darwin":
 		cmd := exec.Command("umount", mp)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			umountErr = fmt.Errorf("unmount %q: %s: %w", mp, strings.TrimSpace(string(out)), err)
 		}
-	} else if e.method == MethodFuse && m.fuseUnmountBin != "" {
+	case e.method == MethodFuse && m.fuseUnmountBin != "":
 		cmd := exec.Command(m.fuseUnmountBin, "-u", mp)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			umountErr = fmt.Errorf("unmount %q: %s: %w", mp, strings.TrimSpace(string(out)), err)
 		}
-	} else {
+	default:
 		cmd := exec.Command("umount", mp)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			umountErr = fmt.Errorf("unmount %q: %s: %w", mp, strings.TrimSpace(string(out)), err)
@@ -268,7 +269,7 @@ func (m *Manager) doUnmount(e *entry) error {
 	}
 
 	if e.cmd != nil && e.cmd.Process != nil {
-		e.cmd.Process.Signal(syscall.SIGTERM)
+		_ = e.cmd.Process.Signal(syscall.SIGTERM)
 	}
 
 	return umountErr

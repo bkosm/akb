@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	akbconfig "github.com/bkosm/akb/config"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type stubConfigurer struct {

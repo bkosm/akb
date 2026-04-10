@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type stubConfigurer struct {
-	cfg        config.Config
-	saved      *config.Config
+	cfg         config.Config
+	saved       *config.Config
 	retrieveErr error
-	saveErr    error
+	saveErr     error
 }
 
 func (s *stubConfigurer) Retrieve(context.Context) (config.Config, error) {

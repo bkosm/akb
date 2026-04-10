@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
 	"github.com/bkosm/akb/endpoints"
 	"github.com/bkosm/akb/mount"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Input holds the parameters for the list_kbs tool (none required).

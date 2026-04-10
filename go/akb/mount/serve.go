@@ -10,12 +10,12 @@ import (
 // ServeSetup prepares the manager for serving a set of KBs. It runs
 // preflight for any remote KB, then returns two lifecycle functions:
 //
-//   run     — call in a goroutine after the MCP server starts; mounts every
-//             KB and, on success, calls onMounted(name, mountPath). If
-//             onMounted returns a non-nil stop func it is collected for
-//             cleanup.
-//   cleanup — call on shutdown; invokes every collected stop func, then
-//             unmounts all remote KBs.
+//	run     — call in a goroutine after the MCP server starts; mounts every
+//	          KB and, on success, calls onMounted(name, mountPath). If
+//	          onMounted returns a non-nil stop func it is collected for
+//	          cleanup.
+//	cleanup — call on shutdown; invokes every collected stop func, then
+//	          unmounts all remote KBs.
 //
 // err is non-nil only when preflight fails (e.g. rclone not on PATH).
 //
@@ -61,7 +61,9 @@ func (m *Manager) ServeSetup(
 			stop()
 		}
 		mu.Unlock()
-		m.unmountAll()
+		if err := m.unmountAll(); err != nil {
+			log.Printf("cleanup: unmount: %v", err)
+		}
 	}
 
 	return run, cleanup, nil

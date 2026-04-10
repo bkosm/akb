@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bkosm/akb/config"
 	"github.com/bkosm/akb/mount"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type stubConfigurer struct {
@@ -100,7 +100,7 @@ func TestHandle_RemoteKB_MountSuccess(t *testing.T) {
 	}}
 
 	mgr := mount.NewManager()
-	t.Cleanup(func() { mgr.Unmount(dir) })
+	t.Cleanup(func() { _ = mgr.Unmount(dir) })
 
 	ctx := config.IntoContext(context.Background(), sc)
 	ctx = mount.IntoContext(ctx, mgr)

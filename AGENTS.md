@@ -7,22 +7,28 @@ This file provides guidance to coding agents when working with code in this repo
 All Go code lives under `go/akb/`. Run commands from the repo root.
 
 ```bash
+# Build binary
+make build
+
 # Run all tests
-go test ./go/akb/...
+make test
 
 # Run tests for a specific package
 go test ./go/akb/endpoints/newkb/
 go test -run TestFunctionName ./go/akb/...
+
+# Lint
+make lint
+
+# Format and vet
+make fmt
+make vet
 
 # Run the server (local config backend)
 ./bin/stdio.sh local [--path ~/.config/akb/config.json]
 
 # Run the server (S3 config backend)
 ./bin/stdio.sh s3 [--bucket akb] [--region us-east-1] [--config-key config.json]
-
-# Format and vet
-go fmt ./go/akb/...
-go vet ./go/akb/...
 ```
 
 `bin/stdio.sh` loads `.envrc` via direnv (if present) and runs `go run go/akb/cmd/stdio/main.go "$@"`.

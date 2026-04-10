@@ -52,7 +52,9 @@ func main() {
 	case "local":
 		fs := flag.NewFlagSet("local", flag.ExitOnError)
 		path := fs.String("path", "$HOME/.config/akb/config.json", "config file path")
-		fs.Parse(os.Args[2:])
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
 		configurer = &configlocalfs.LocalFS{Path: *path}
 
 	case "s3":
@@ -60,7 +62,9 @@ func main() {
 		bucket := fs.String("bucket", "", "S3 bucket name (default: akb-<account-id>)")
 		region := fs.String("region", "", "AWS region (optional)")
 		configKey := fs.String("config-key", "config.json", "S3 object key for config")
-		fs.Parse(os.Args[2:])
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
 
 		awsCfg, err := configs3.LoadConfig(ctx, *region)
 		if err != nil {
