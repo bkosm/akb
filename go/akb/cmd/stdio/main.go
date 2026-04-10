@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,6 +40,18 @@ The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB tha
 Use patch_config to update KB connection settings. Changes to config take effect after MCP server restart.`
 
 func main() {
+	logLevel := os.Getenv("LOG_LEVEL")
+	level := slog.LevelInfo
+	switch logLevel {
+	case "debug", "DEBUG":
+		level = slog.LevelDebug
+	case "warn", "WARN":
+		level = slog.LevelWarn
+	case "error", "ERROR":
+		level = slog.LevelError
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: akb <local|s3> [flags]")
 		os.Exit(1)
@@ -53,7 +65,8 @@ func main() {
 		fs := flag.NewFlagSet("local", flag.ExitOnError)
 		path := fs.String("path", "$HOME/.config/akb/config.json", "config file path")
 		if err := fs.Parse(os.Args[2:]); err != nil {
-			log.Fatal(err)
+			slog.Error("parse flags", "err", err)
+			os.Exit(1)
 		}
 		configurer = &configlocalfs.LocalFS{Path: *path}
 
@@ -63,16 +76,19 @@ func main() {
 		region := fs.String("region", "", "AWS region (optional)")
 		configKey := fs.String("config-key", "config.json", "S3 object key for config")
 		if err := fs.Parse(os.Args[2:]); err != nil {
-			log.Fatal(err)
+			slog.Error("parse flags", "err", err)
+			os.Exit(1)
 		}
 
 		awsCfg, err := configs3.LoadConfig(ctx, *region)
 		if err != nil {
-			log.Fatal(err)
+			slog.Error("load AWS config", "err", err)
+			os.Exit(1)
 		}
 		s3Cfg, err := configs3.New(ctx, *bucket, *configKey, awsCfg)
 		if err != nil {
-			log.Fatal(err)
+			slog.Error("init S3 config backend", "err", err)
+			os.Exit(1)
 		}
 		configurer = s3Cfg
 
@@ -82,7 +98,8 @@ func main() {
 	}
 
 	if err := run(ctx, configurer, &mcp.StdioTransport{}); err != nil {
-		log.Fatal(err)
+		slog.Error("server error", "err", err)
+		os.Exit(1)
 	}
 }
 
@@ -127,10 +144,12 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		}
 	}
 
+	slog.Info("akb starting", "kbs", len(cfg.KBs))
+
 	startMounts, cleanup, err := mgr.ServeSetup(cfg.KBs, func(name, mountPath string) func() {
 		stop, err := prompt.RegisterForKB(server, name, mountPath)
 		if err != nil {
-			log.Printf("prompts: register for kb %q: %v", name, err)
+			slog.Error("register prompts for kb", "kb", name, "err", err)
 			return nil
 		}
 		return stop

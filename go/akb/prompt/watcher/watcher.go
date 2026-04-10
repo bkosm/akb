@@ -2,7 +2,7 @@ package watcher
 
 import (
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +83,7 @@ func (w *Watcher) loop() {
 			if !ok {
 				return
 			}
-			log.Printf("file watcher error: %v", err)
+			slog.Error("file watcher error", "err", err)
 		}
 	}
 }

@@ -3,7 +3,7 @@ package prompt
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -67,7 +67,7 @@ func RegisterForKB(server *mcp.Server, kbName, mountPath string) (stop func(), e
 
 		def, parseErr := ParseFile(ev.Path)
 		if parseErr != nil {
-			log.Printf("prompt watcher: skip %q: %v", ev.Path, parseErr)
+			slog.Warn("prompt watcher: skip file", "path", ev.Path, "err", parseErr)
 			return
 		}
 		def.Name = ev.Name
@@ -75,7 +75,7 @@ func RegisterForKB(server *mcp.Server, kbName, mountPath string) (stop func(), e
 		register(kbName, def)
 	})
 	if err != nil {
-		log.Printf("prompt watcher for kb %q: %v (prompts won't auto-update)", kbName, err)
+		slog.Warn("prompt watcher failed, prompts won't auto-update", "kb", kbName, "err", err)
 		return func() {}, nil
 	}
 

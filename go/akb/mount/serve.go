@@ -1,7 +1,7 @@
 package mount
 
 import (
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/bkosm/akb/config"
@@ -41,7 +41,7 @@ func (m *Manager) ServeSetup(
 	run = func() {
 		for name, kb := range kbs {
 			if err := m.Add(kb.RcloneRemote, kb.Mount, MountMethod(kb.MountMethod), kb.RcloneArgs); err != nil {
-				log.Printf("mount kb %q: %v", name, err)
+				slog.Error("mount kb", "kb", name, "err", err)
 				continue
 			}
 			if onMounted == nil {
@@ -62,7 +62,7 @@ func (m *Manager) ServeSetup(
 		}
 		mu.Unlock()
 		if err := m.unmountAll(); err != nil {
-			log.Printf("cleanup: unmount: %v", err)
+			slog.Error("cleanup unmount", "err", err)
 		}
 	}
 
