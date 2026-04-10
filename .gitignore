@@ -3,9 +3,10 @@
 **/.aws*
 bin/akb
 go/akb/stdio
-stdio
+/stdio
 .cursor/
 .codex/
 .mcp.json
 .envrc
 .secret.envrc
+dist/

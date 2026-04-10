@@ -24,6 +24,9 @@ import (
 	"github.com/bkosm/akb/go/akb/prompt"
 )
 
+// version is set at build time via -ldflags "-X main.version=<version>".
+var version = "dev"
+
 const serverInstructions = `AKB (Agentic Knowledge Base) is a remote knowledge base orchestrator for cross-repo and cross-host agent knowledge sharing.
 
 It mounts local or remote directories (backed by any rclone-supported storage: S3, GCS, SFTP, etc.) so agents can read and write knowledge using standard file tools.
@@ -121,7 +124,7 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		&mcp.Implementation{
 			Name:    "akb",
 			Title:   "Agentic Knowledge Base",
-			Version: "0.0.1",
+			Version: version,
 		},
 		&mcp.ServerOptions{
 			Instructions: serverInstructions,
