@@ -1,7 +1,7 @@
 GO_MODULE := ./go/akb/...
 BIN       := bin/akb
 
-.PHONY: build test lint fmt vet clean
+.PHONY: build test lint fmt vet integration docker-build docker-run clean
 
 build:
 	go build -o $(BIN) ./go/akb/cmd/stdio/
@@ -20,6 +20,12 @@ vet:
 
 integration:
 	go test -race -tags=integration $(GO_MODULE)
+
+docker-build:
+	docker build -t akb:local .
+
+docker-run:
+	docker run --rm -i akb:local local
 
 clean:
 	rm -f $(BIN)

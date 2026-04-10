@@ -1,0 +1,12 @@
+.git
+.cursor
+.codex
+bin/
+*.md
+docs/
+examples/
+.github/
+.golangci.yml
+.envrc*
+Makefile
+Dockerfile
