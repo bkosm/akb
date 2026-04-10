@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bkosm/akb/config"
+	"github.com/bkosm/akb/go/akb/config"
 )
 
 func TestLocalFS_Retrieve(t *testing.T) {

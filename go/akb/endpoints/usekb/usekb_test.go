@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bkosm/akb/config"
-	"github.com/bkosm/akb/mount"
+	"github.com/bkosm/akb/go/akb/config"
+	"github.com/bkosm/akb/go/akb/mount"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

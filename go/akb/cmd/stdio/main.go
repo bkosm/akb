@@ -11,17 +11,17 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/bkosm/akb/config"
-	configlocalfs "github.com/bkosm/akb/config/adapter/localfs"
-	configs3 "github.com/bkosm/akb/config/adapter/s3"
-	"github.com/bkosm/akb/endpoints"
-	endpointconfig "github.com/bkosm/akb/endpoints/config"
-	"github.com/bkosm/akb/endpoints/listkbs"
-	"github.com/bkosm/akb/endpoints/newkb"
-	"github.com/bkosm/akb/endpoints/patchconfig"
-	"github.com/bkosm/akb/endpoints/usekb"
-	"github.com/bkosm/akb/mount"
-	"github.com/bkosm/akb/prompt"
+	"github.com/bkosm/akb/go/akb/config"
+	configlocalfs "github.com/bkosm/akb/go/akb/config/adapter/localfs"
+	configs3 "github.com/bkosm/akb/go/akb/config/adapter/s3"
+	"github.com/bkosm/akb/go/akb/endpoints"
+	endpointconfig "github.com/bkosm/akb/go/akb/endpoints/config"
+	"github.com/bkosm/akb/go/akb/endpoints/listkbs"
+	"github.com/bkosm/akb/go/akb/endpoints/newkb"
+	"github.com/bkosm/akb/go/akb/endpoints/patchconfig"
+	"github.com/bkosm/akb/go/akb/endpoints/usekb"
+	"github.com/bkosm/akb/go/akb/mount"
+	"github.com/bkosm/akb/go/akb/prompt"
 )
 
 const serverInstructions = `AKB (Agentic Knowledge Base) is a remote knowledge base orchestrator for cross-repo and cross-host agent knowledge sharing.

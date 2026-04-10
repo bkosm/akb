@@ -1,4 +1,4 @@
-module github.com/bkosm/akb
+module github.com/bkosm/akb/go/akb
 
 go 1.25.1
 

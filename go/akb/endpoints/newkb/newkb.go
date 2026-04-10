@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bkosm/akb/config"
-	"github.com/bkosm/akb/endpoints"
-	"github.com/bkosm/akb/mount"
+	"github.com/bkosm/akb/go/akb/config"
+	"github.com/bkosm/akb/go/akb/endpoints"
+	"github.com/bkosm/akb/go/akb/mount"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bkosm/akb/config"
+	"github.com/bkosm/akb/go/akb/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

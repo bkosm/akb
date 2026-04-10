@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bkosm/akb/config"
+	"github.com/bkosm/akb/go/akb/config"
 )
 
 // LocalFS is a config.Interface backed by a JSON file on disk.

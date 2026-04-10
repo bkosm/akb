@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/bkosm/akb/config"
+	"github.com/bkosm/akb/go/akb/config"
 )
 
 // fakeS3 implements just the S3 operations used by the config adapter,

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/bkosm/akb/prompt/watcher"
+	"github.com/bkosm/akb/go/akb/prompt/watcher"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

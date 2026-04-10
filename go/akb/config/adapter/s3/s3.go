@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/bkosm/akb/config"
+	"github.com/bkosm/akb/go/akb/config"
 )
 
 // S3 is a config.Interface backed by an S3 object. It uses If-Match / ETag

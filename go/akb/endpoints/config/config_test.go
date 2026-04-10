@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	akbconfig "github.com/bkosm/akb/config"
+	akbconfig "github.com/bkosm/akb/go/akb/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

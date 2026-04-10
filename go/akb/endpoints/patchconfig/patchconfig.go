@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bkosm/akb/config"
-	"github.com/bkosm/akb/endpoints"
+	"github.com/bkosm/akb/go/akb/config"
+	"github.com/bkosm/akb/go/akb/endpoints"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

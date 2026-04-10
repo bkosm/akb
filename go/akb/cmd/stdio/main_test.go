@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/bkosm/akb/config"
-	configlocalfs "github.com/bkosm/akb/config/adapter/localfs"
+	"github.com/bkosm/akb/go/akb/config"
+	configlocalfs "github.com/bkosm/akb/go/akb/config/adapter/localfs"
 )
 
 func TestRun(t *testing.T) {

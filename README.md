@@ -12,6 +12,8 @@ An MCP server that manages knowledge bases as mounted directories. AI agents int
 
 ```bash
 go install github.com/bkosm/akb/go/akb/cmd/stdio@latest
+# The binary is named 'stdio'; rename or alias as needed:
+mv "$(go env GOPATH)/bin/stdio" "$(go env GOPATH)/bin/akb"
 ```
 
 ### Download binary
