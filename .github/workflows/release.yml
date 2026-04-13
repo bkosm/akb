@@ -16,6 +16,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME#go/akb/}
           git tag "$VERSION" "$GITHUB_SHA"
+          git push origin "$VERSION"
           echo "GORELEASER_CURRENT_TAG=$VERSION" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
