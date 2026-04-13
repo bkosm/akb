@@ -16,6 +16,7 @@ import (
 	configs3 "github.com/bkosm/akb/go/akb/config/adapter/s3"
 	"github.com/bkosm/akb/go/akb/endpoints"
 	endpointconfig "github.com/bkosm/akb/go/akb/endpoints/config"
+	"github.com/bkosm/akb/go/akb/endpoints/kbs"
 	"github.com/bkosm/akb/go/akb/endpoints/listkbs"
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
 	"github.com/bkosm/akb/go/akb/endpoints/patchkb"
@@ -132,14 +133,16 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		&mcp.ServerOptions{
 			Instructions: serverInstructions,
 			Capabilities: &mcp.ServerCapabilities{
-				Logging: &mcp.LoggingCapabilities{},
-				Prompts: &mcp.PromptCapabilities{ListChanged: true},
+				Logging:   &mcp.LoggingCapabilities{},
+				Prompts:   &mcp.PromptCapabilities{ListChanged: true},
+				Resources: &mcp.ResourceCapabilities{ListChanged: true},
 			},
 		},
 	)
 
 	for _, register := range []endpoints.RegisterFunc{
 		endpointconfig.Register,
+		kbs.Register,
 		newkb.Register,
 		listkbs.Register,
 		patchkb.Register,
