@@ -31,12 +31,12 @@ make build
 
 ### Local config
 
-- [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=akb-s3&config=eyJlbnYiOnsiQVdTX1BST0ZJTEUiOiJzc28tcHJvZmlsZSIsIkFXU19SRUdJT04iOiJidWNrZXQtcmVnaW9uIn0sImNvbW1hbmQiOiJha2IgczMifQ%3D%3D)
+- <a href="https://cursor.com/en-US/install-mcp?name=akb-s3&config=eyJlbnYiOnsiQVdTX1BST0ZJTEUiOiJzc28tcHJvZmlsZSIsIkFXU19SRUdJT04iOiJidWNrZXQtcmVnaW9uIn0sImNvbW1hbmQiOiJha2IgczMifQ%3D%3D" target="_blank"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor"></a>
 - `claude mcp add akb-local -- akb local`
 
 ### S3 config
 
-- [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=akb-local&config=eyJjb21tYW5kIjoiYWtiIGxvY2FsIn0%3D)
+- <a href="https://cursor.com/en-US/install-mcp?name=akb-local&config=eyJjb21tYW5kIjoiYWtiIGxvY2FsIn0%3D" target="_blank"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor"></a>
 - `claude mcp add akb-s3 -e AWS_PROFILE=profile -e AWS_REGION=eu-west-1 -- akb s3`
 
 
