@@ -18,7 +18,7 @@ type Unique string
 type KB struct {
 	RcloneRemote string            `json:"rclone_remote,omitempty"`
 	Mount        string            `json:"mount"`
-	MountMethod  string            `json:"mount_method,omitempty"` // "fuse", "nfs", or "" (auto: prefer FUSE, fall back to NFS)
+	Method       string            `json:"mount_method,omitempty"` // "fuse", "nfs", or "" (auto: prefer FUSE, fall back to NFS)
 	RcloneArgs   map[string]string `json:"rclone_args,omitempty"`  // flag overrides keyed by flag name without "--"; empty value for boolean flags
 	Description  string            `json:"description,omitempty"`
 }

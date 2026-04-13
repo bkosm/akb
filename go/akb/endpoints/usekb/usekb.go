@@ -57,7 +57,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 		}, nil
 	}
 
-	mgr, err := mount.FromContext(ctx)
+	mgr, err := mount.ManagerFromContext(ctx)
 	if err != nil {
 		return nil, Output{}, fmt.Errorf("mount manager: %w", err)
 	}
@@ -74,7 +74,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 		if err := mgr.Preflight(); err != nil {
 			return nil, Output{}, err
 		}
-		if err := mgr.Add(kbEntry.RcloneRemote, kbEntry.Mount, mount.MountMethod(kbEntry.MountMethod), kbEntry.RcloneArgs); err != nil {
+		if err := mgr.Add(ctx, input.Name, kbEntry.RcloneRemote, kbEntry.Mount, mount.Method(kbEntry.Method), kbEntry.RcloneArgs); err != nil {
 			return nil, Output{}, fmt.Errorf("mount: %w", err)
 		}
 		return nil, Output{

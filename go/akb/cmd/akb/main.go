@@ -20,6 +20,7 @@ import (
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
 	"github.com/bkosm/akb/go/akb/endpoints/patchconfig"
 	"github.com/bkosm/akb/go/akb/endpoints/usekb"
+	"github.com/bkosm/akb/go/akb/filewatch"
 	"github.com/bkosm/akb/go/akb/mount"
 	"github.com/bkosm/akb/go/akb/prompt"
 )
@@ -118,7 +119,7 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 	}
 
 	mgr := mount.NewManager()
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	server := mcp.NewServer(
 		&mcp.Implementation{
@@ -147,16 +148,13 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		}
 	}
 
+	ctx = mount.OnMountedIntoContext(ctx, func(kbName, mountPath string) (func(), error) {
+		return filewatch.Register(mountPath, prompt.PromptSuffix, prompt.NewHandler(server, kbName))
+	})
+
 	slog.Info("akb starting", "kbs", len(cfg.KBs))
 
-	startMounts, cleanup, err := mgr.ServeSetup(cfg.KBs, func(name, mountPath string) func() {
-		stop, err := prompt.RegisterForKB(server, name, mountPath)
-		if err != nil {
-			slog.Error("register prompts for kb", "kb", name, "err", err)
-			return nil
-		}
-		return stop
-	})
+	startMounts, cleanup, err := mgr.ServeSetup(ctx, cfg.KBs)
 	if err != nil {
 		return err
 	}

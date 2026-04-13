@@ -17,7 +17,7 @@ type Input struct {
 	Name         string            `json:"name" jsonschema:"the unique name for this knowledge base"`
 	RcloneRemote string            `json:"rclone_remote,omitempty" jsonschema:"rclone remote path spec. Omit for a plain local directory. Format ':backend,opt=val:bucket/path'. Examples: ':s3,env_auth=true,region=us-east-1:my-bucket/prefix/'. See https://rclone.org/overview/#syntax-of-remote-paths"`
 	Mount        string            `json:"mount" jsonschema:"local path. When rclone_remote is set this is the FUSE mountpoint (defaults to $HOME/.akb/mounts/<name>). When rclone_remote is omitted this is the existing local directory to use."`
-	MountMethod  string            `json:"mount_method,omitempty" jsonschema:"how to mount the remote: 'fuse' (rclone mount, requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE needed), or omit for auto (prefer FUSE, fall back to NFS). Ignored for local directories."`
+	Method       string            `json:"mount_method,omitempty" jsonschema:"how to mount the remote: 'fuse' (rclone mount, requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE needed), or omit for auto (prefer FUSE, fall back to NFS). Ignored for local directories."`
 	RcloneArgs   map[string]string `json:"rclone_args,omitempty" jsonschema:"rclone flag overrides keyed by flag name without '--'. Merged on top of defaults (vfs-cache-mode=full, vfs-cache-max-size=1G, etc). Empty value for boolean flags (e.g. {\"read-only\": \"\"}). See https://rclone.org/commands/rclone_mount/#options"`
 	Description  string            `json:"description,omitempty" jsonschema:"human-readable description of the knowledge base"`
 }
@@ -62,7 +62,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 
 	resolved := filepath.Clean(os.ExpandEnv(input.Mount))
 
-	mgr, err := mount.FromContext(ctx)
+	mgr, err := mount.ManagerFromContext(ctx)
 	if err != nil {
 		return nil, Output{}, fmt.Errorf("mount manager: %w", err)
 	}
@@ -72,14 +72,14 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 			return nil, Output{}, pfErr
 		}
 	}
-	if addErr := mgr.Add(input.RcloneRemote, input.Mount, mount.MountMethod(input.MountMethod), input.RcloneArgs); addErr != nil {
+	if addErr := mgr.Add(ctx, input.Name, input.RcloneRemote, input.Mount, mount.Method(input.Method), input.RcloneArgs); addErr != nil {
 		return nil, Output{}, fmt.Errorf("mount: %w", addErr)
 	}
 
 	cfg.KBs[unique] = config.KB{
 		RcloneRemote: input.RcloneRemote,
 		Mount:        input.Mount,
-		MountMethod:  input.MountMethod,
+		Method:       input.Method,
 		RcloneArgs:   input.RcloneArgs,
 		Description:  input.Description,
 	}

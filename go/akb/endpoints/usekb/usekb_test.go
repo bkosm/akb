@@ -73,7 +73,7 @@ func TestHandle_RemoteKB_MountPreflightFails(t *testing.T) {
 
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "mount"})
 	if err == nil {
@@ -103,7 +103,7 @@ func TestHandle_RemoteKB_MountSuccess(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Unmount(dir) })
 
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "mount"})
 	if err != nil {
@@ -124,7 +124,7 @@ func TestHandle_Unmount_Deregisters(t *testing.T) {
 
 	mgr := mount.NewManager()
 	// Add as a local entry so Unmount succeeds (no-op for local).
-	if err := mgr.Add("", dir, mount.MethodAuto, nil); err != nil {
+	if err := mgr.Add(context.Background(), "test", "", dir, mount.MethodAuto, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,7 +136,7 @@ func TestHandle_Unmount_Deregisters(t *testing.T) {
 	}}
 
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "my-kb", Action: "unmount"})
 	if err != nil {
@@ -147,7 +147,7 @@ func TestHandle_Unmount_Deregisters(t *testing.T) {
 	}
 
 	// After deregister, Add should succeed again for the same path.
-	if err := mgr.Add("", dir, mount.MethodAuto, nil); err != nil {
+	if err := mgr.Add(context.Background(), "test", "", dir, mount.MethodAuto, nil); err != nil {
 		t.Fatalf("re-Add after deregister should succeed: %v", err)
 	}
 }
@@ -173,7 +173,7 @@ func TestHandle_Unmount_DeregistersEvenOnError(t *testing.T) {
 		},
 	}}
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "unmount"})
 	if err == nil {
@@ -183,7 +183,7 @@ func TestHandle_Unmount_DeregistersEvenOnError(t *testing.T) {
 	// After the failed unmount, Deregister must have been called (no-op here
 	// since the path was never registered). The key invariant: a subsequent
 	// Add for the same path must not be blocked.
-	if err := mgr.Add("", dir, mount.MethodAuto, nil); err != nil {
+	if err := mgr.Add(context.Background(), "test", "", dir, mount.MethodAuto, nil); err != nil {
 		t.Fatalf("Add after failed unmount should succeed: %v", err)
 	}
 }

@@ -106,24 +106,24 @@ func TestEditKB_Mount(t *testing.T) {
 	}
 }
 
-func TestEditKB_MountMethod(t *testing.T) {
+func TestEditKB_Method(t *testing.T) {
 	t.Parallel()
 	sc := &stubConfigurer{cfg: config.Config{
 		KBs: map[config.Unique]config.KB{
-			"my-kb": {Mount: "/tmp/kb", RcloneRemote: ":s3:bucket/", MountMethod: ""},
+			"my-kb": {Mount: "/tmp/kb", RcloneRemote: ":s3:bucket/", Method: ""},
 		},
 	}}
 	ctx := config.IntoContext(context.Background(), sc)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
-		Name:        "my-kb",
-		MountMethod: strPtr("nfs"),
+		Name:   "my-kb",
+		Method: strPtr("nfs"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sc.saved.KBs["my-kb"].MountMethod != "nfs" {
-		t.Fatalf("mount_method = %q, want nfs", sc.saved.KBs["my-kb"].MountMethod)
+	if sc.saved.KBs["my-kb"].Method != "nfs" {
+		t.Fatalf("mount_method = %q, want nfs", sc.saved.KBs["my-kb"].Method)
 	}
 	if sc.saved.KBs["my-kb"].RcloneRemote != ":s3:bucket/" {
 		t.Fatal("existing rclone_remote should be preserved")

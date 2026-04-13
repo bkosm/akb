@@ -21,7 +21,7 @@ type KBInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Mount       string `json:"mount"`
-	MountMethod string `json:"mount_method,omitempty"`
+	Method      string `json:"mount_method,omitempty"`
 	Mounted     bool   `json:"mounted"`
 }
 
@@ -42,7 +42,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 		return nil, Output{}, fmt.Errorf("retrieve config: %w", err)
 	}
 
-	mgr, _ := mount.FromContext(ctx)
+	mgr, _ := mount.ManagerFromContext(ctx)
 
 	kbs := make([]KBInfo, 0, len(cfg.KBs))
 	for name, entry := range cfg.KBs {
@@ -60,7 +60,7 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 			Name:        string(name),
 			Description: entry.Description,
 			Mount:       resolved,
-			MountMethod: entry.MountMethod,
+			Method:      entry.Method,
 			Mounted:     mounted,
 		})
 	}

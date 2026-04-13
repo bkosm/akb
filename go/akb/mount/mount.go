@@ -1,7 +1,9 @@
 package mount
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,33 +26,37 @@ var DefaultRcloneArgs = map[string]string{
 	"vfs-write-back":     "5s",
 }
 
-// MountMethod determines how remote storage is mounted locally.
-type MountMethod string
+// Method determines how remote storage is mounted locally.
+type Method string
 
 const (
-	MethodAuto MountMethod = ""     // prefer FUSE, fall back to NFS
-	MethodFuse MountMethod = "fuse" // rclone mount (requires FUSE library)
-	MethodNFS  MountMethod = "nfs"  // rclone nfsmount (no FUSE dependency)
+	MethodAuto Method = ""     // prefer FUSE, fall back to NFS
+	MethodFuse Method = "fuse" // rclone mount (requires FUSE library)
+	MethodNFS  Method = "nfs"  // rclone nfsmount (no FUSE dependency)
 )
 
 type entry struct {
 	remote     string // empty for plain local directories
 	mountpoint string
-	method     MountMethod // resolved method (never MethodAuto)
-	cmd        *exec.Cmd   // rclone child process (nil for local dirs)
+	method     Method    // resolved method (never MethodAuto)
+	cmd        *exec.Cmd // rclone child process (nil for local dirs)
 }
 
 // Manager tracks rclone mounts and plain local directories.
 type Manager struct {
 	mu              sync.Mutex
 	entries         map[string]*entry // mountpoint -> entry
+	stops           map[string]func() // mountpoint -> watcher stop func
 	fuseUnmountBin  string            // "fusermount3"/"fusermount" (Linux only, for FUSE unmounts)
 	hasFUSE         bool
 	preflightCalled bool
 }
 
 func NewManager() *Manager {
-	return &Manager{entries: make(map[string]*entry)}
+	return &Manager{
+		entries: make(map[string]*entry),
+		stops:   make(map[string]func()),
+	}
 }
 
 // Preflight checks that rclone is available and probes FUSE support.
@@ -95,7 +101,7 @@ func (m *Manager) hasFuse() bool {
 }
 
 // resolveMethod picks the concrete mount method from a possibly-auto value.
-func (m *Manager) resolveMethod(method MountMethod) (MountMethod, error) {
+func (m *Manager) resolveMethod(method Method) (Method, error) {
 	switch method {
 	case MethodFuse:
 		if !m.hasFUSE {
@@ -121,7 +127,9 @@ func (m *Manager) resolveMethod(method MountMethod) (MountMethod, error) {
 // as a local directory and ignores method/extraArgs.
 // The rclone process runs as a direct child (non-daemon) and is tracked for
 // cleanup via Unmount/UnmountAll.
-func (m *Manager) Add(remote, mountpoint string, method MountMethod, extraArgs map[string]string) error {
+// After a successful mount, Add invokes the OnMounted hook from ctx (if any)
+// and stores the returned stop func for cleanup.
+func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, method Method, extraArgs map[string]string) error {
 	if mountpoint == "" {
 		return fmt.Errorf("mount path is required for all kbs")
 	}
@@ -177,12 +185,37 @@ func (m *Manager) Add(remote, mountpoint string, method MountMethod, extraArgs m
 	m.mu.Lock()
 	m.entries[mountpoint] = e
 	m.mu.Unlock()
+
+	if hook, err := OnMountedFromContext(ctx); err == nil {
+		if stop, hookErr := hook(name, mountpoint); hookErr != nil {
+			slog.Error("on-mounted hook", "kb", name, "err", hookErr)
+		} else if stop != nil {
+			m.addStopFunc(mountpoint, stop)
+		}
+	}
+
 	return nil
+}
+
+func (m *Manager) addStopFunc(mountpoint string, stop func()) {
+	m.mu.Lock()
+	m.stops[mountpoint] = stop
+	m.mu.Unlock()
+}
+
+func (m *Manager) runAndClearStopFunc(mountpoint string) {
+	m.mu.Lock()
+	stop, ok := m.stops[mountpoint]
+	delete(m.stops, mountpoint)
+	m.mu.Unlock()
+	if ok && stop != nil {
+		stop()
+	}
 }
 
 // rcloneMount starts rclone as a direct child process (no --daemon).
 // Returns the running Cmd so the caller can track and kill it.
-func (m *Manager) rcloneMount(remote, mountpoint string, method MountMethod, extraArgs map[string]string) (*exec.Cmd, error) {
+func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArgs map[string]string) (*exec.Cmd, error) {
 	subcmd := "mount"
 	if method == MethodNFS {
 		subcmd = "nfsmount"
@@ -234,6 +267,8 @@ func (m *Manager) Unmount(mountpoint string) error {
 	if !ok {
 		return fmt.Errorf("mountpoint %q not registered", mountpoint)
 	}
+
+	m.runAndClearStopFunc(mountpoint)
 
 	if e.remote == "" {
 		return nil
@@ -338,6 +373,7 @@ func (m *Manager) unmountAll() error {
 
 	var errs []error
 	for _, e := range entries {
+		m.runAndClearStopFunc(e.mountpoint)
 		if e.remote == "" {
 			continue
 		}
@@ -348,6 +384,7 @@ func (m *Manager) unmountAll() error {
 
 	m.mu.Lock()
 	m.entries = make(map[string]*entry)
+	m.stops = make(map[string]func())
 	m.mu.Unlock()
 
 	if len(errs) > 0 {
@@ -360,6 +397,7 @@ func (m *Manager) unmountAll() error {
 // Use after Unmount to allow a subsequent Add for the same path.
 func (m *Manager) Deregister(mountpoint string) {
 	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+	m.runAndClearStopFunc(mountpoint)
 	m.mu.Lock()
 	delete(m.entries, mountpoint)
 	m.mu.Unlock()

@@ -19,7 +19,7 @@ func ctxWithLocalSetup(t *testing.T, cfgPath string) (context.Context, *mount.Ma
 	configurer := &configlocalfs.LocalFS{Path: cfgPath}
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), configurer)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 	return ctx, mgr
 }
 
@@ -35,7 +35,7 @@ func TestHandle_createsLocalKB(t *testing.T) {
 	configurer := &configlocalfs.LocalFS{Path: cfgPath}
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), configurer)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
 		Name:  "my-kb",
@@ -123,7 +123,7 @@ func TestHandle_MountBeforeSave(t *testing.T) {
 	sc := newStubConfigurer(config.Config{KBs: make(map[config.Unique]config.KB)})
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
 		Name:  "local-kb",
@@ -156,7 +156,7 @@ func TestHandle_SaveFailDeregisters(t *testing.T) {
 	sc.saveErr = errors.New("save failed")
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
 		Name:  "kb",
@@ -215,7 +215,7 @@ func TestHandle_defaultMountPath(t *testing.T) {
 	sc := newStubConfigurer(config.Config{KBs: make(map[config.Unique]config.KB)})
 	mgr := mount.NewManager()
 	ctx := config.IntoContext(context.Background(), sc)
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
 		Name:         "my-remote",

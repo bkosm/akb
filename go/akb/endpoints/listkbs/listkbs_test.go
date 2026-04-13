@@ -99,7 +99,7 @@ func TestHandle_RemoteKB_MountManager(t *testing.T) {
 	// IsMounted returns false for local entries (remote=""), so we verify the
 	// mounted=false path for remote KBs whose manager entry has no active mount.
 	mgr := mount.NewManager()
-	if err := mgr.Add("", dir, mount.MethodAuto, nil); err != nil {
+	if err := mgr.Add(context.Background(), "test", "", dir, mount.MethodAuto, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +110,7 @@ func TestHandle_RemoteKB_MountManager(t *testing.T) {
 			},
 		},
 	})
-	ctx = mount.IntoContext(ctx, mgr)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
 
 	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{})
 	if err != nil {

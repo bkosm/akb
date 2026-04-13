@@ -4,28 +4,31 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/bkosm/akb/go/akb/prompt/watcher"
+	"github.com/bkosm/akb/go/akb/filewatch"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// RegisterForKB discovers .prompt.md files in mountPath, registers them as
-// MCP prompts namespaced under kbName, and starts an fsnotify watcher.
-// Returns a stop function to tear down the watcher.
-func RegisterForKB(server *mcp.Server, kbName, mountPath string) (stop func(), err error) {
-	mountPath = filepath.Clean(os.ExpandEnv(mountPath))
+// PromptRegistrar is satisfied by *mcp.Server and allows tests to use stubs.
+type PromptRegistrar interface {
+	AddPrompt(p *mcp.Prompt, h mcp.PromptHandler)
+	RemovePrompts(names ...string)
+}
 
+// NewHandler returns a filewatch.OnFile callback that parses .prompt.md files
+// and registers or removes them as MCP prompts on server, namespaced under
+// kbName.
+func NewHandler(server PromptRegistrar, kbName string) filewatch.OnFile {
 	mu := &sync.Mutex{}
 	registered := make(map[string]struct{})
 
-	register := func(kbName string, def Definition) {
-		name := kbName + "/" + def.Name
+	register := func(name string, def Definition) {
+		fullName := kbName + "/" + name
 		mcpPrompt := &mcp.Prompt{
-			Name:        name,
-			Title:       name,
+			Name:        fullName,
+			Title:       fullName,
 			Description: def.Description,
 		}
 		for _, arg := range def.Arguments {
@@ -35,51 +38,35 @@ func RegisterForKB(server *mcp.Server, kbName, mountPath string) (stop func(), e
 				Required:    arg.Required,
 			})
 		}
-
-		handler := makeHandler(def)
-		server.AddPrompt(mcpPrompt, handler)
+		server.AddPrompt(mcpPrompt, makeHandler(def))
 
 		mu.Lock()
-		registered[name] = struct{}{}
+		registered[fullName] = struct{}{}
 		mu.Unlock()
 	}
 
-	defs, err := Discover(mountPath)
-	if err != nil {
-		return nil, fmt.Errorf("discover prompts in %q: %w", mountPath, err)
-	}
-	for _, def := range defs {
-		register(kbName, def)
-	}
-
-	w, err := watcher.Watch(mountPath, PromptSuffix, func(ev watcher.Event) {
-		name := kbName + "/" + ev.Name
-		if ev.Deleted {
+	return func(name, path string, deleted bool) {
+		fullName := kbName + "/" + name
+		if deleted {
 			mu.Lock()
-			_, was := registered[name]
-			delete(registered, name)
+			_, was := registered[fullName]
+			delete(registered, fullName)
 			mu.Unlock()
 			if was {
-				server.RemovePrompts(name)
+				server.RemovePrompts(fullName)
 			}
 			return
 		}
 
-		def, parseErr := ParseFile(ev.Path)
-		if parseErr != nil {
-			slog.Warn("prompt watcher: skip file", "path", ev.Path, "err", parseErr)
+		def, err := ParseFile(path)
+		if err != nil {
+			slog.Warn("prompt handler: skip file", "path", path, "err", err)
 			return
 		}
-		def.Name = ev.Name
-		def.SourcePath = ev.Path
-		register(kbName, def)
-	})
-	if err != nil {
-		slog.Warn("prompt watcher failed, prompts won't auto-update", "kb", kbName, "err", err)
-		return func() {}, nil
+		def.Name = name
+		def.SourcePath = path
+		register(name, def)
 	}
-
-	return w.Stop, nil
 }
 
 func makeHandler(def Definition) mcp.PromptHandler {

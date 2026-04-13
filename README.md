@@ -27,15 +27,18 @@ make build
 # binary at bin/akb
 ```
 
-## Quick start
+## Configure as MCP
 
-```bash
-# Local config backend
-./bin/akb.sh local
+### Local config
 
-# S3 config backend (uses env credentials)
-./bin/akb.sh s3
-```
+- [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=akb-local&config=eyJjb21tYW5kIjoiYWtiIGxvY2FsIn0%3D)
+- `claude mcp add akb-local -- akb local`
+
+### S3 config
+
+- [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=akb-s3&config=eyJlbnYiOnsiQVdTX1BST0ZJTEUiOiJwcm9maWxlIiwiQVdTX1JFR0lPTiI6ImV1LXdlc3QtMSJ9LCJjb21tYW5kIjoiYWtiIHMzIn0%3D)
+- `claude mcp add akb-s3 -e AWS_PROFILE=profile -e AWS_REGION=eu-west-1 -- akb s3`
+
 
 ## Architecture
 
