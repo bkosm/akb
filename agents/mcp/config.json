@@ -9,13 +9,8 @@
       "args": ["s3"]
     },
     "akb-docker-local": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "-v", "~/.config/akb:/home/akb/.config/akb",
-        "ghcr.io/bkosm/akb:main",
-        "local", "--path", "/home/akb/.config/akb/config.json"
-      ]
+      "command": "akb-docker-local.sh",
+      "args": []
     },
     "akb-docker-s3": {
       "command": "akb-docker-s3.sh",

@@ -171,6 +171,14 @@ KBs are mounted in a background goroutine that runs **concurrently** with the MC
 | **S3** | Uses `If-Match` / ETag for optimistic locking. Conflicts return `ErrConflict` — callers should re-`Retrieve` and retry. |
 | **localfs** | No locking. Last-writer-wins. Intended for single-process use. |
 
+### Docker wrappers
+
+`bin/akb-docker-s3.sh` and `bin/akb-docker-local.sh` run the MCP server inside a Docker container. They mount `tmp/docker/` (relative to the repo root) as a volume at `/tmp/docker` inside the container and pass `--privileged`.
+
+**Local KBs** (no `rclone_remote`) work normally — set `mount` to `/tmp/docker/<name>` so files are accessible on the host at `tmp/docker/<name>/`.
+
+**Limitation — remote KBs are not supported on macOS with the Docker wrappers.** Docker Desktop uses VirtioFS to share macOS paths into the Docker VM. VirtioFS-backed bind mounts are always `private` propagation, so neither FUSE nor NFS mounts started inside the container are visible from the host. Use the native binary (`bin/stdio.sh`) when `rclone_remote` is needed. See [docs/rclone-setup.md](docs/rclone-setup.md) for details.
+
 ### Prompt `include` security
 
 `{{include "path"}}` is not sandboxed — a `../` traversal can read any file the server process can access. KB prompts are treated as trusted content.

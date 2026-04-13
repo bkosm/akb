@@ -29,6 +29,15 @@ make vet
 
 # Run the server (S3 config backend)
 ./bin/stdio.sh s3 [--bucket akb] [--region us-east-1] [--config-key config.json]
+
+# Run the server in Docker (local config backend)
+./bin/akb-docker-local.sh
+
+# Run the server in Docker (S3 config backend)
+./bin/akb-docker-s3.sh
+# Note: remote KBs (rclone_remote set) are not supported inside Docker on macOS
+# due to VirtioFS mount propagation limitations. Use stdio.sh for remote KBs.
+# See docs/rclone-setup.md for details.
 ```
 
 `bin/stdio.sh` loads `.envrc` via direnv (if present) and runs `go run go/akb/cmd/stdio/main.go "$@"`.

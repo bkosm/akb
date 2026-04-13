@@ -100,3 +100,26 @@ macOS (~60s vs sub-second for FUSE-T).
 The `auto` mount method (the default when `mount_method` is omitted) handles
 this transparently: it checks for FUSE availability and falls back to NFS if
 FUSE is not installed.
+
+## Docker containers
+
+Remote KBs **cannot** be mounted when running AKB inside Docker on macOS. This is a Docker Desktop limitation, not an rclone or AKB limitation.
+
+### Why it fails
+
+Docker Desktop shares macOS paths into the Docker VM via **VirtioFS**. VirtioFS-backed bind mounts are always marked `private` propagation by the kernel, meaning submounts created inside the container are never reflected back on the host.
+
+**FUSE** — requesting shared propagation is outright rejected:
+
+```
+docker: Error response from daemon: path /host_mnt/Users/... is mounted on
+/host_mnt/Users but it is not a shared mount
+```
+
+**NFS** — `rclone nfsmount` succeeds inside the container (the `--privileged` flag grants the necessary capabilities), but the resulting mount lives in the container's mount namespace. The host sees only the empty underlying directory through the bind mount — not the NFS overlay.
+
+### What this means
+
+The `bin/akb-docker-s3.sh` and `bin/akb-docker-local.sh` wrappers are limited to **local KBs** (no `rclone_remote`) on macOS. For remote-backed KBs, use the native binary (`bin/stdio.sh`) directly — it runs rclone on the host where mount propagation is not an issue.
+
+On Linux Docker hosts, FUSE and NFS mounts inside the container work normally provided the appropriate kernel capabilities are available.
