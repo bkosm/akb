@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/bkosm/akb/go/akb/config"
 	"github.com/bkosm/akb/go/akb/endpoints"
@@ -28,7 +27,6 @@ const (
 
 // KBInfo describes a single knowledge base entry.
 type KBInfo struct {
-	Name         string      `json:"name"`
 	Description  string      `json:"description,omitempty"`
 	Mount        string      `json:"mount"`
 	Method       string      `json:"mount_method,omitempty"`
@@ -50,7 +48,7 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 
 	mgr, _ := mount.ManagerFromContext(ctx)
 
-	kbs := make([]KBInfo, 0, len(cfg.KBs))
+	kbMap := make(map[string]KBInfo, len(cfg.KBs))
 	for name, entry := range cfg.KBs {
 		resolved := filepath.Clean(os.ExpandEnv(entry.Mount))
 
@@ -71,21 +69,19 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 			}
 		}
 
-		kbs = append(kbs, KBInfo{
-			Name:         string(name),
+		kbMap[string(name)] = KBInfo{
 			Description:  entry.Description,
 			Mount:        resolved,
 			Method:       entry.Method,
 			RcloneRemote: entry.RcloneRemote,
 			MountStatus:  status,
 			MountError:   mountErrMsg,
-		})
+		}
 	}
-	sort.Slice(kbs, func(i, j int) bool { return kbs[i].Name < kbs[j].Name })
 
 	data, err := json.MarshalIndent(struct {
-		KBs []KBInfo `json:"kbs"`
-	}{KBs: kbs}, "", "  ")
+		KBs map[string]KBInfo `json:"kbs"`
+	}{KBs: kbMap}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal kbs: %w", err)
 	}
@@ -105,16 +101,12 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		URI:   ResourceURI,
 		Name:  "kbs",
 		Title: "Knowledge Bases",
-		Description: `List of all configured knowledge bases with their mount paths and status.
+		Description: `Knowledge bases with live mount status. Same map shape as akb://config (name as key), extended with:
+  - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
+  - mount_error: present only when mount_status is "failed"
 
-Each entry includes:
-  - mount: local path to use with file tools (Read, Write, Glob, Grep)
-  - mount_status: "mounted", "not_mounted", or "failed"
-  - rclone_remote: present only for remote-backed KBs (S3, GCS, SFTP, …); absent means a plain local directory
-
-All KBs are auto-mounted at server startup, so mounted KBs are ready for immediate use.
-
-Subscribe to this resource to receive notifications when mount status changes (e.g. a KB finishes mounting or is unmounted).`,
+Use mount as the local path for file tools (Read, Write, Glob, Grep).
+Only "mounted" KBs are ready for use; "not_mounted" means startup is still in progress.`,
 		MIMEType: "application/json",
 		Annotations: &mcp.Annotations{
 			Audience: []mcp.Role{"assistant"},

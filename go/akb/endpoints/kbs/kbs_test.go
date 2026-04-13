@@ -18,13 +18,13 @@ type stubConfigurer struct {
 func (s *stubConfigurer) Retrieve(context.Context) (config.Config, error) { return s.cfg, nil }
 func (s *stubConfigurer) Save(context.Context, config.Config) error       { return nil }
 
-func parseKBs(t *testing.T, result *mcp.ReadResourceResult) []KBInfo {
+func parseKBs(t *testing.T, result *mcp.ReadResourceResult) map[string]KBInfo {
 	t.Helper()
 	if len(result.Contents) != 1 {
 		t.Fatalf("expected 1 content, got %d", len(result.Contents))
 	}
 	var out struct {
-		KBs []KBInfo `json:"kbs"`
+		KBs map[string]KBInfo `json:"kbs"`
 	}
 	if err := json.Unmarshal([]byte(result.Contents[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -48,15 +48,18 @@ func TestHandler_WithKBs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kbList := parseKBs(t, result)
-	if len(kbList) != 2 {
-		t.Fatalf("len = %d, want 2", len(kbList))
+	kbMap := parseKBs(t, result)
+	if len(kbMap) != 2 {
+		t.Fatalf("len = %d, want 2", len(kbMap))
 	}
-	if kbList[0].Name != "alpha" || kbList[1].Name != "beta" {
-		t.Fatalf("unexpected order: %v", kbList)
+	if _, ok := kbMap["alpha"]; !ok {
+		t.Fatal("missing key alpha")
 	}
-	if kbList[0].Description != "Alpha KB" {
-		t.Fatalf("description = %q", kbList[0].Description)
+	if _, ok := kbMap["beta"]; !ok {
+		t.Fatal("missing key beta")
+	}
+	if kbMap["alpha"].Description != "Alpha KB" {
+		t.Fatalf("description = %q", kbMap["alpha"].Description)
 	}
 }
 
@@ -68,9 +71,9 @@ func TestHandler_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kbList := parseKBs(t, result)
-	if len(kbList) != 0 {
-		t.Fatalf("len = %d, want 0", len(kbList))
+	kbMap := parseKBs(t, result)
+	if len(kbMap) != 0 {
+		t.Fatalf("len = %d, want 0", len(kbMap))
 	}
 }
 
@@ -97,12 +100,12 @@ func TestHandler_LocalDirMounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kbList := parseKBs(t, result)
-	if len(kbList) != 1 {
-		t.Fatalf("len = %d, want 1", len(kbList))
+	kbMap := parseKBs(t, result)
+	if len(kbMap) != 1 {
+		t.Fatalf("len = %d, want 1", len(kbMap))
 	}
-	if kbList[0].MountStatus != MountStatusMounted {
-		t.Fatalf("MountStatus = %q, want %q", kbList[0].MountStatus, MountStatusMounted)
+	if kbMap["local"].MountStatus != MountStatusMounted {
+		t.Fatalf("MountStatus = %q, want %q", kbMap["local"].MountStatus, MountStatusMounted)
 	}
 }
 
@@ -122,19 +125,15 @@ func TestHandler_NoMountManager(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kbList := parseKBs(t, result)
-	if len(kbList) != 2 {
-		t.Fatalf("len = %d, want 2", len(kbList))
+	kbMap := parseKBs(t, result)
+	if len(kbMap) != 2 {
+		t.Fatalf("len = %d, want 2", len(kbMap))
 	}
-	byName := make(map[string]KBInfo)
-	for _, kb := range kbList {
-		byName[kb.Name] = kb
+	if kbMap["local"].MountStatus != MountStatusMounted {
+		t.Fatalf("local MountStatus = %q, want %q", kbMap["local"].MountStatus, MountStatusMounted)
 	}
-	if byName["local"].MountStatus != MountStatusMounted {
-		t.Fatalf("local MountStatus = %q, want %q", byName["local"].MountStatus, MountStatusMounted)
-	}
-	if byName["remote"].MountStatus != MountStatusNotMounted {
-		t.Fatalf("remote MountStatus = %q, want %q", byName["remote"].MountStatus, MountStatusNotMounted)
+	if kbMap["remote"].MountStatus != MountStatusNotMounted {
+		t.Fatalf("remote MountStatus = %q, want %q", kbMap["remote"].MountStatus, MountStatusNotMounted)
 	}
 }
 
@@ -158,11 +157,11 @@ func TestHandler_RemoteKB_MountFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kbList := parseKBs(t, result)
-	if len(kbList) != 1 {
-		t.Fatalf("len = %d, want 1", len(kbList))
+	kbMap := parseKBs(t, result)
+	if len(kbMap) != 1 {
+		t.Fatalf("len = %d, want 1", len(kbMap))
 	}
-	kb := kbList[0]
+	kb := kbMap["remote-kb"]
 	if kb.MountStatus != MountStatusFailed {
 		t.Fatalf("MountStatus = %q, want %q", kb.MountStatus, MountStatusFailed)
 	}
