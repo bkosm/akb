@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Strip tag prefix
+        run: echo "GORELEASER_CURRENT_TAG=${GITHUB_REF_NAME#go/akb/}" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go/akb/go.mod
@@ -21,3 +23,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ env.GORELEASER_CURRENT_TAG }}
