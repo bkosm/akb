@@ -21,4 +21,6 @@ exec docker run --rm -i \
   -e AWS_SDK_LOAD_CONFIG=1 \
   -e "AWS_CONFIG_FILE=$CONTAINER_AWS_CONFIG" \
   -v "${AWS_CONFIG_FILE:-$HOME/.aws/config}:$CONTAINER_AWS_CONFIG:ro" \
+  -v "$HOME/.aws/sso/cache:/home/akb/.aws/sso/cache:ro" \
+  -v "$HOME/.aws/cli/cache:/home/akb/.aws/cli/cache:ro" \
   ghcr.io/bkosm/akb:main s3 "$@"
