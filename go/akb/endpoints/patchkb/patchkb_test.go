@@ -1,4 +1,4 @@
-package patchconfig
+package patchkb
 
 import (
 	"context"
@@ -130,6 +130,31 @@ func TestEditKB_Method(t *testing.T) {
 	}
 }
 
+func TestEditKB_RcloneArgs(t *testing.T) {
+	t.Parallel()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {Mount: "/tmp/kb", RcloneArgs: map[string]string{"vfs-cache-mode": "full"}},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:       "my-kb",
+		RcloneArgs: map[string]string{"buffer-size": "128M"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := sc.saved.KBs["my-kb"].RcloneArgs
+	if got["buffer-size"] != "128M" {
+		t.Fatalf("rclone_args[buffer-size] = %q, want 128M", got["buffer-size"])
+	}
+	if _, old := got["vfs-cache-mode"]; old {
+		t.Fatal("rclone_args should be fully replaced, old key should be gone")
+	}
+}
+
 func TestEditKB_SwitchToLocal(t *testing.T) {
 	t.Parallel()
 	sc := &stubConfigurer{cfg: config.Config{
@@ -165,6 +190,36 @@ func TestEditKB_NotFound(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for missing kb")
+	}
+}
+
+func TestEditKB_EmptyName(t *testing.T) {
+	t.Parallel()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:        "",
+		Description: strPtr("x"),
+	})
+	if err == nil {
+		t.Fatal("expected error for empty name")
+	}
+}
+
+func TestHandle_NoConfigInContext(t *testing.T) {
+	t.Parallel()
+	_, _, err := Handle(context.Background(), &mcp.CallToolRequest{}, Input{
+		Name:        "my-kb",
+		Description: strPtr("x"),
+	})
+	if err == nil {
+		t.Fatal("expected error when config not in context")
+	}
+	if !strings.Contains(err.Error(), "config") {
+		t.Fatalf("error = %q, want mention of 'config'", err)
 	}
 }
 

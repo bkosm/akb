@@ -12,6 +12,10 @@ import (
 // MCP server to register tools or prompts against.
 type RegisterFunc func(context.Context, *mcp.Server) error
 
-// BoolFalse is a shared false pointer used by endpoint tool annotations
-// (OpenWorldHint, DestructiveHint). Shared here to avoid per-package duplication.
-var BoolFalse = false
+// BoolFalse and BoolTrue are shared bool pointers used by endpoint tool
+// annotations (OpenWorldHint, DestructiveHint). Shared here to avoid
+// per-package duplication.
+var (
+	BoolFalse = false
+	BoolTrue  = true
+)

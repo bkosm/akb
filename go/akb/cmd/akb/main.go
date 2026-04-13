@@ -18,7 +18,8 @@ import (
 	endpointconfig "github.com/bkosm/akb/go/akb/endpoints/config"
 	"github.com/bkosm/akb/go/akb/endpoints/listkbs"
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
-	"github.com/bkosm/akb/go/akb/endpoints/patchconfig"
+	"github.com/bkosm/akb/go/akb/endpoints/patchkb"
+	"github.com/bkosm/akb/go/akb/endpoints/purgekb"
 	"github.com/bkosm/akb/go/akb/endpoints/usekb"
 	"github.com/bkosm/akb/go/akb/filewatch"
 	"github.com/bkosm/akb/go/akb/mount"
@@ -41,7 +42,8 @@ Prompts are auto-discovered from *.prompt.md files in KBs. Write a .prompt.md fi
 
 The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB that failed at startup or manually unmounting to free resources.
 
-Use patch_config to update KB connection settings. Changes to config take effect after MCP server restart.`
+Use patch_kb to update KB connection settings. Changes to config take effect after MCP server restart.
+Use purge_kb to remove a KB from config, optionally deleting all files at its mount path.`
 
 func main() {
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -140,7 +142,8 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 		endpointconfig.Register,
 		newkb.Register,
 		listkbs.Register,
-		patchconfig.Register,
+		patchkb.Register,
+		purgekb.Register,
 		usekb.Register,
 	} {
 		if err := register(ctx, server); err != nil {

@@ -1,4 +1,4 @@
-package patchconfig
+package patchkb
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Input holds the parameters for the patch_config tool.
+// Input holds the parameters for the patch_kb tool.
 type Input struct {
 	Name         string            `json:"name" jsonschema:"the config key of the KB entry to edit"`
 	RcloneRemote *string           `json:"rclone_remote,omitempty" jsonschema:"new rclone remote path spec. Set empty string to switch to plain local mode. Format ':backend,opt=val:bucket/path'. See https://rclone.org/overview/#syntax-of-remote-paths"`
@@ -19,14 +19,14 @@ type Input struct {
 	Description  *string           `json:"description,omitempty" jsonschema:"new description for the KB"`
 }
 
-// Output is the response payload for the patch_config tool.
+// Output is the response payload for the patch_kb tool.
 type Output struct {
 	Hint string `json:"hint"`
 }
 
 const savedHint = "Config saved. MCP server restart required for changes to take effect."
 
-// Handle implements the patch_config tool handler.
+// Handle implements the patch_kb tool handler.
 func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, Output, error) {
 	configurer, err := config.FromContext(ctx)
 	if err != nil {
@@ -76,11 +76,11 @@ func editKB(cfg *config.Config, input Input) error {
 	return nil
 }
 
-// Register adds the patch_config tool to the MCP server.
+// Register adds the patch_kb tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "patch_config",
-		Title: "Update Configuration",
+		Name:  "patch_kb",
+		Title: "Update KB Configuration",
 		Description: `Merge-patch a knowledge base config entry.
 
 Only provided fields are updated; omitted fields are preserved. Works for KB settings: rclone_remote, mount path, mount method, rclone args, description.
