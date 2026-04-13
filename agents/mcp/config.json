@@ -18,17 +18,8 @@
       ]
     },
     "akb-docker-s3": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "-e", "AWS_PROFILE",
-        "-e", "AWS_SDK_LOAD_CONFIG=1",
-        "-v", "~/.aws/config:/root/.aws/config:ro",
-        "-v", "~/.aws/sso/cache:/root/.aws/sso/cache:ro",
-        "-v", "~/.aws/cli/cache:/root/.aws/cli/cache:ro",
-        "ghcr.io/bkosm/akb:main",
-        "s3"
-      ]
+      "command": "akb-docker-s3.sh",
+      "args": []
     }
   }
 }
