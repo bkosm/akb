@@ -16,10 +16,10 @@ A prompt's MCP name is derived from its path inside the KB:
 
 Examples:
 
-| File path in KB            | MCP prompt name              |
-|----------------------------|------------------------------|
-| `code-review.prompt.md`    | `my-kb/code-review`          |
-| `git/commit-msg.prompt.md` | `my-kb/git/commit-msg`       |
+| File path in KB            | MCP prompt name        |
+| -------------------------- | ---------------------- |
+| `code-review.prompt.md`    | `my-kb/code-review`    |
+| `git/commit-msg.prompt.md` | `my-kb/git/commit-msg` |
 
 Dot-prefixed files (e.g. `.draft.prompt.md`) are ignored by the watcher.
 
@@ -44,7 +44,7 @@ Full frontmatter schema:
 ---
 description: One-line description shown in the prompt list
 arguments:
-  - name: language      # referenced in the body as {{.language}}
+  - name: language # referenced in the body as {{.language}}
     required: true
     description: The programming language to review
   - name: focus
@@ -52,6 +52,13 @@ arguments:
     description: Optional area to focus on
 ---
 ```
+
+> **Recommendation: avoid arguments.** Most coding agents do not surface argument
+> input fields to the user and will invoke the prompt without filling them in.
+> Instead, write a self-contained prompt body that instructs the user to provide
+> the relevant details as a follow-up message. Any text the user types after the
+> slash command is passed to the model in a similar fashion and gives a much
+> better UX.
 
 ---
 
@@ -69,19 +76,15 @@ Supported roles: any word — `system`, `user`, `assistant`, etc.
 ```markdown
 ---
 description: Code reviewer with a system persona
-arguments:
-  - name: language
-    required: true
-    description: Programming language
 ---
 
 # @system
 
-You are an expert {{.language}} code reviewer. Be concise and constructive.
+You are an expert code reviewer. Be concise and constructive.
 
 ## @user
 
-Please review the code I am about to share.
+Please share the code you would like me to review.
 ```
 
 ---
@@ -91,12 +94,12 @@ Please review the code I am about to share.
 Bodies are rendered with Go `text/template` (`missingkey=zero` — missing arguments
 expand to an empty string rather than an error).
 
-| Construct                             | Effect                                      |
-|---------------------------------------|---------------------------------------------|
-| `{{.argname}}`                        | Substitute the argument value               |
-| `{{if .argname}}…{{end}}`             | Conditional block (omit when empty)         |
-| `{{if .argname}}…{{else}}…{{end}}`    | Conditional with fallback                   |
-| `{{include "relative/path"}}`         | Inline content of another file (see below)  |
+| Construct                          | Effect                                     |
+| ---------------------------------- | ------------------------------------------ |
+| `{{.argname}}`                     | Substitute the argument value              |
+| `{{if .argname}}…{{end}}`          | Conditional block (omit when empty)        |
+| `{{if .argname}}…{{else}}…{{end}}` | Conditional with fallback                  |
+| `{{include "relative/path"}}`      | Inline content of another file (see below) |
 
 Example using conditionals:
 
@@ -143,10 +146,6 @@ File: `my-kb/git/commit-msg.prompt.md`
 ```markdown
 ---
 description: Generate a conventional commit message
-arguments:
-  - name: scope
-    required: false
-    description: Commit scope (e.g. auth, api)
 ---
 
 # @system
@@ -156,7 +155,8 @@ Conventional Commits specification.
 
 ## @user
 
-Generate a commit message for the diff I will provide.{{if .scope}} The scope is "{{.scope}}".{{end}}
+Share a diff or describe your change and I will generate a commit message for it.
 ```
 
-This prompt registers as `my-kb/git/commit-msg` and accepts an optional `scope` argument.
+This prompt registers as `my-kb/git/commit-msg`. The user provides the diff or
+description as a follow-up message — no arguments needed.
