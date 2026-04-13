@@ -3,6 +3,7 @@ package filewatch
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -299,4 +300,90 @@ func TestRegister_stopReleasesResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	stop() // must not panic or block
+}
+
+// --- dotfile / hidden file filtering ---
+
+func TestRegister_skipsAppleDoubleSidecar(t *testing.T) {
+	dir := t.TempDir()
+	// real prompt — must appear
+	if err := os.WriteFile(filepath.Join(dir, "real.prompt.md"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// macOS AppleDouble sidecar — must be skipped
+	if err := os.WriteFile(filepath.Join(dir, "._real.prompt.md"), []byte("meta"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	col := &collector{}
+	stop, err := Register(dir, testSuffix, col.onFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	calls := col.all()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 call (real), got %d: %+v", len(calls), calls)
+	}
+	if calls[0].name != "real" {
+		t.Fatalf("expected name 'real', got %q", calls[0].name)
+	}
+}
+
+func TestRegister_skipsDotPrefixedFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".hidden.prompt.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	col := &collector{}
+	stop, err := Register(dir, testSuffix, col.onFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	if got := col.all(); len(got) != 0 {
+		t.Fatalf("expected no calls for dot-prefixed file, got %+v", got)
+	}
+}
+
+func TestRegister_dotFileEventIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("fsnotify test")
+	}
+	dir := t.TempDir()
+	col := &collector{}
+
+	stop, err := Register(dir, testSuffix, col.onFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	// Writing a sidecar must not trigger onFile.
+	if err := os.WriteFile(filepath.Join(dir, "._new.prompt.md"), []byte("meta"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Writing the real file must trigger onFile.
+	if err := os.WriteFile(filepath.Join(dir, "new.prompt.md"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := waitFor(t, col, 1, 5*time.Second)
+	for _, c := range calls {
+		if strings.HasPrefix(c.name, ".") || strings.HasPrefix(filepath.Base(c.path), ".") {
+			t.Fatalf("dot-prefixed file must not produce an event, got %+v", c)
+		}
+	}
+	found := false
+	for _, c := range calls {
+		if c.name == "new" && !c.deleted {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected create event for 'new', got %+v", calls)
+	}
 }

@@ -39,6 +39,9 @@ func walkExisting(dir, suffix string, onFile OnFile) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
 		if !strings.HasSuffix(d.Name(), suffix) {
 			return nil
 		}
@@ -124,6 +127,9 @@ func (w *watcher) handle(ev fsnotify.Event) {
 	}
 
 	if !strings.HasSuffix(path, w.suffix) {
+		return
+	}
+	if strings.HasPrefix(filepath.Base(path), ".") {
 		return
 	}
 
