@@ -11,9 +11,7 @@ An MCP server that manages knowledge bases as mounted directories. AI agents int
 ### go install
 
 ```bash
-go install github.com/bkosm/akb/go/akb/cmd/stdio@latest
-# The binary is named 'stdio'; rename or alias as needed:
-mv "$(go env GOPATH)/bin/stdio" "$(go env GOPATH)/bin/akb"
+go install github.com/bkosm/akb/go/akb/cmd/akb@latest
 ```
 
 ### Download binary
@@ -33,10 +31,10 @@ make build
 
 ```bash
 # Local config backend
-./bin/stdio.sh local
+./bin/akb.sh local
 
 # S3 config backend (uses env credentials)
-./bin/stdio.sh s3
+./bin/akb.sh s3
 ```
 
 ## Architecture
@@ -177,7 +175,7 @@ KBs are mounted in a background goroutine that runs **concurrently** with the MC
 
 **Local KBs** (no `rclone_remote`) work normally — set `mount` to `/tmp/docker/<name>` so files are accessible on the host at `tmp/docker/<name>/`.
 
-**Limitation — remote KBs are not supported on macOS with the Docker wrappers.** Docker Desktop uses VirtioFS to share macOS paths into the Docker VM. VirtioFS-backed bind mounts are always `private` propagation, so neither FUSE nor NFS mounts started inside the container are visible from the host. Use the native binary (`bin/stdio.sh`) when `rclone_remote` is needed. See [docs/rclone-setup.md](docs/rclone-setup.md) for details.
+**Limitation — remote KBs are not supported on macOS with the Docker wrappers.** Docker Desktop uses VirtioFS to share macOS paths into the Docker VM. VirtioFS-backed bind mounts are always `private` propagation, so neither FUSE nor NFS mounts started inside the container are visible from the host. Use the native binary (`bin/akb.sh`) when `rclone_remote` is needed. See [docs/rclone-setup.md](docs/rclone-setup.md) for details.
 
 ### Prompt `include` security
 

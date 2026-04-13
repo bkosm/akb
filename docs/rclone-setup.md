@@ -120,6 +120,6 @@ docker: Error response from daemon: path /host_mnt/Users/... is mounted on
 
 ### What this means
 
-The `bin/akb-docker-s3.sh` and `bin/akb-docker-local.sh` wrappers are limited to **local KBs** (no `rclone_remote`) on macOS. For remote-backed KBs, use the native binary (`bin/stdio.sh`) directly — it runs rclone on the host where mount propagation is not an issue.
+The `bin/akb-docker-s3.sh` and `bin/akb-docker-local.sh` wrappers are limited to **local KBs** (no `rclone_remote`) on macOS. For remote-backed KBs, use the native binary (`bin/akb.sh`) directly — it runs rclone on the host where mount propagation is not an issue.
 
 On Linux Docker hosts, FUSE and NFS mounts inside the container work normally provided the appropriate kernel capabilities are available.

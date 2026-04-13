@@ -21,10 +21,10 @@ source .envrc
 
 ```bash
 # Local config backend
-./bin/stdio.sh local
+./bin/akb.sh local
 
 # S3 config backend
-./bin/stdio.sh s3 --bucket my-bucket
+./bin/akb.sh s3 --bucket my-bucket
 ```
 
 ## Make targets

@@ -9,7 +9,7 @@ RUN cd go/akb && go mod download
 
 COPY go/akb/ ./go/akb/
 
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /akb ./go/akb/cmd/stdio/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /akb ./go/akb/cmd/akb/
 
 FROM alpine:3.21
 

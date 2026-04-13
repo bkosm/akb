@@ -5,7 +5,7 @@ VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo de
 .PHONY: build test lint fmt vet integration docker-build docker-run release-snapshot clean
 
 build:
-	go build -ldflags "-X main.version=$(VERSION)" -o $(BIN) ./go/akb/cmd/stdio/
+	go build -ldflags "-X main.version=$(VERSION)" -o $(BIN) ./go/akb/cmd/akb/
 
 test:
 	go test -race $(GO_MODULE)

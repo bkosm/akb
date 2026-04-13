@@ -12,4 +12,4 @@ if command -v direnv &>/dev/null && [ -f "$WORKSPACE/.envrc" ]; then
 fi
 
 cd "$WORKSPACE"
-exec go run go/akb/cmd/stdio/main.go "$@"
+exec go run go/akb/cmd/akb/main.go "$@"

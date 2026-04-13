@@ -25,10 +25,10 @@ make fmt
 make vet
 
 # Run the server (local config backend)
-./bin/stdio.sh local [--path ~/.config/akb/config.json]
+./bin/akb.sh local [--path ~/.config/akb/config.json]
 
 # Run the server (S3 config backend)
-./bin/stdio.sh s3 [--bucket akb] [--region us-east-1] [--config-key config.json]
+./bin/akb.sh s3 [--bucket akb] [--region us-east-1] [--config-key config.json]
 
 # Run the server in Docker (local config backend)
 ./bin/akb-docker-local.sh
@@ -36,11 +36,11 @@ make vet
 # Run the server in Docker (S3 config backend)
 ./bin/akb-docker-s3.sh
 # Note: remote KBs (rclone_remote set) are not supported inside Docker on macOS
-# due to VirtioFS mount propagation limitations. Use stdio.sh for remote KBs.
+# due to VirtioFS mount propagation limitations. Use akb.sh for remote KBs.
 # See docs/rclone-setup.md for details.
 ```
 
-`bin/stdio.sh` loads `.envrc` via direnv (if present) and runs `go run go/akb/cmd/stdio/main.go "$@"`.
+`bin/akb.sh` loads `.envrc` via direnv (if present) and runs `go run go/akb/cmd/akb/main.go "$@"`.
 
 ## Using knowledge bases
 
@@ -92,7 +92,7 @@ This is an MCP (Model Context Protocol) server that manages knowledge bases as m
 ### Layered structure
 
 ```
-cmd/stdio/main.go            — entry point, wires config + mount manager, starts MCP server
+cmd/akb/main.go              — entry point, wires config + mount manager, starts MCP server
 endpoints/{name}/            — MCP tool/prompt registrations (one package per tool)
 mount/                       — rclone FUSE mount lifecycle manager
 prompt/                      — .prompt.md parser, template renderer, file discovery
