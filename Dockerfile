@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /akb ./go/ak
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates fuse3 && \
+RUN apk add --no-cache ca-certificates fuse3 rclone && \
     addgroup -S akb && adduser -S -G akb akb
 
 COPY --from=builder /akb /usr/local/bin/akb
