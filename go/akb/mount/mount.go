@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -221,6 +222,13 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 			return err
 		}
 		e.cmd = cmd
+
+		waitCtx, waitCancel := context.WithTimeout(ctx, mountCheckTimeout())
+		defer waitCancel()
+		if err := m.waitForMount(waitCtx, mountpoint); err != nil {
+			_ = m.doUnmount(e)
+			return fmt.Errorf("mount did not become ready: %w", err)
+		}
 	}
 
 	m.mu.Lock()
@@ -457,6 +465,53 @@ func (m *Manager) Deregister(mountpoint string) {
 	m.mu.Lock()
 	delete(m.entries, mountpoint)
 	m.mu.Unlock()
+}
+
+// mountCheckPollInterval returns the interval between mount-readiness polls.
+// Reads AKB_MOUNT_CHECK_POLL_MS from the environment (default 200 ms).
+// Invalid or missing values fall back to the default silently.
+func mountCheckPollInterval() time.Duration {
+	const defaultMs = 200
+	if s := os.Getenv("AKB_MOUNT_CHECK_POLL_MS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return defaultMs * time.Millisecond
+}
+
+// mountCheckTimeout returns the maximum time to wait for a remote mount to
+// become ready. Reads AKB_MOUNT_CHECK_TIMEOUT_MS from the environment
+// (default 30000 ms). Invalid or missing values fall back to the default silently.
+func mountCheckTimeout() time.Duration {
+	const defaultMs = 30_000
+	if s := os.Getenv("AKB_MOUNT_CHECK_TIMEOUT_MS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return defaultMs * time.Millisecond
+}
+
+// waitForMount polls checkMount until the OS mount table shows mountpoint as
+// mounted or ctx is cancelled. It checks once immediately before starting the
+// ticker so already-mounted paths return without delay.
+func (m *Manager) waitForMount(ctx context.Context, mountpoint string) error {
+	if m.checkMount(mountpoint) {
+		return nil
+	}
+	ticker := time.NewTicker(mountCheckPollInterval())
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for mount at %q: %w", mountpoint, ctx.Err())
+		case <-ticker.C:
+			if m.checkMount(mountpoint) {
+				return nil
+			}
+		}
+	}
 }
 
 func pathExists(path string) bool {

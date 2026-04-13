@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAdd_LocalDir(t *testing.T) {
@@ -421,5 +422,106 @@ func TestAdd_Remote_ProbeBlocks(t *testing.T) {
 	mgr.mu.Unlock()
 	if registered {
 		t.Fatal("mountpoint should not be registered after probe failure")
+	}
+}
+
+// --- mountCheckPollInterval ---
+
+func TestMountCheckPollInterval_Default(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "")
+	if got := mountCheckPollInterval(); got != 200*time.Millisecond {
+		t.Fatalf("expected 200ms default, got %v", got)
+	}
+}
+
+func TestMountCheckPollInterval_EnvOverride(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "500")
+	if got := mountCheckPollInterval(); got != 500*time.Millisecond {
+		t.Fatalf("expected 500ms, got %v", got)
+	}
+}
+
+func TestMountCheckPollInterval_InvalidEnv(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "notanumber")
+	if got := mountCheckPollInterval(); got != 200*time.Millisecond {
+		t.Fatalf("expected 200ms default for invalid env, got %v", got)
+	}
+}
+
+func TestMountCheckPollInterval_ZeroEnv(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "0")
+	if got := mountCheckPollInterval(); got != 200*time.Millisecond {
+		t.Fatalf("expected 200ms default for zero env, got %v", got)
+	}
+}
+
+// --- mountCheckTimeout ---
+
+func TestMountCheckTimeout_Default(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_TIMEOUT_MS", "")
+	if got := mountCheckTimeout(); got != 30_000*time.Millisecond {
+		t.Fatalf("expected 30000ms default, got %v", got)
+	}
+}
+
+func TestMountCheckTimeout_EnvOverride(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_TIMEOUT_MS", "5000")
+	if got := mountCheckTimeout(); got != 5000*time.Millisecond {
+		t.Fatalf("expected 5000ms, got %v", got)
+	}
+}
+
+func TestMountCheckTimeout_InvalidEnv(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_TIMEOUT_MS", "bad")
+	if got := mountCheckTimeout(); got != 30_000*time.Millisecond {
+		t.Fatalf("expected 30000ms default for invalid env, got %v", got)
+	}
+}
+
+func TestMountCheckTimeout_ZeroEnv(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_TIMEOUT_MS", "0")
+	if got := mountCheckTimeout(); got != 30_000*time.Millisecond {
+		t.Fatalf("expected 30000ms default for zero env, got %v", got)
+	}
+}
+
+// --- waitForMount ---
+
+// TestWaitForMount_AlreadyMounted verifies that waitForMount returns immediately
+// when the mountpoint is already in the OS mount table. The system root "/"
+// is always mounted on both Linux and macOS.
+func TestWaitForMount_AlreadyMounted(t *testing.T) {
+	t.Parallel()
+	mgr := NewManager()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := mgr.waitForMount(ctx, "/"); err != nil {
+		t.Fatalf("waitForMount for system root should succeed immediately: %v", err)
+	}
+}
+
+// TestWaitForMount_Timeout verifies that waitForMount returns an error when the
+// context deadline is exceeded before the mount appears.
+func TestWaitForMount_Timeout(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "10")
+	dir := t.TempDir()
+	mgr := NewManager()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := mgr.waitForMount(ctx, dir); err == nil {
+		t.Fatal("expected error for unmounted dir")
+	}
+}
+
+// TestWaitForMount_CancelledContext verifies that a pre-cancelled context
+// causes waitForMount to return an error without polling.
+func TestWaitForMount_CancelledContext(t *testing.T) {
+	t.Setenv("AKB_MOUNT_CHECK_POLL_MS", "10")
+	dir := t.TempDir()
+	mgr := NewManager()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := mgr.waitForMount(ctx, dir); err == nil {
+		t.Fatal("expected error for pre-cancelled context")
 	}
 }
