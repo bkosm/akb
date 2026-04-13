@@ -1,8 +1,32 @@
 {
   "mcpServers": {
-    "akb": {
-      "command": "bash",
-      "args": ["bin/stdio.sh", "local"]
+    "akb-local": {
+      "command": "stdio.sh",
+      "args": ["local"]
+    },
+    "akb-s3": {
+      "command": "stdio.sh",
+      "args": ["s3"]
+    },
+    "akb-docker-local": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "~/.config/akb:/home/akb/.config/akb",
+        "ghcr.io/bkosm/akb:main",
+        "local", "--path", "/home/akb/.config/akb/config.json"
+      ]
+    },
+    "akb-docker-s3": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "AWS_ACCESS_KEY_ID",
+        "-e", "AWS_SECRET_ACCESS_KEY",
+        "-e", "AWS_REGION",
+        "ghcr.io/bkosm/akb:main",
+        "s3"
+      ]
     }
   }
 }

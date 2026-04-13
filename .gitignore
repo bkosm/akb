@@ -8,6 +8,5 @@ go/akb/stdio
 !.cursor/mcp.json
 .codex/*
 !.codex/mcp.json
-.envrc
 .secret.envrc
 dist/

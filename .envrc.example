@@ -1,6 +1,0 @@
-#!/bin/bash
-
-PWD=$(pwd)
-
-export WORKSPACE="$PWD"
-export PATH="$WORKSPACE/bin:$PATH"
