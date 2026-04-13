@@ -15,7 +15,7 @@ jobs:
       - name: Create plain semver tag for GoReleaser
         run: |
           VERSION=${GITHUB_REF_NAME#go/akb/}
-          git tag "$VERSION"
+          git tag "$VERSION" "$GITHUB_SHA"
           echo "GORELEASER_CURRENT_TAG=$VERSION" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
