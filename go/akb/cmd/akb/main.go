@@ -19,6 +19,7 @@ import (
 	"github.com/bkosm/akb/go/akb/endpoints/kbs"
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
 	"github.com/bkosm/akb/go/akb/endpoints/patchkb"
+	"github.com/bkosm/akb/go/akb/endpoints/promptreference"
 	"github.com/bkosm/akb/go/akb/endpoints/purgekb"
 	"github.com/bkosm/akb/go/akb/endpoints/usekb"
 	"github.com/bkosm/akb/go/akb/filewatch"
@@ -43,7 +44,10 @@ Two independent dimensions:
   - KB storage: where each KB's files actually live — either a local directory or a rclone remote (S3, GCS, SFTP, …).
   Any combination is valid. A local-config server can have S3-backed KBs; an S3-config server can have local-directory KBs.
 
-Prompts are auto-discovered from *.prompt.md files in KBs. Write a .prompt.md file to any KB and it becomes a slash-command prompt automatically.
+Prompts are auto-discovered from *.prompt.md files in KBs and become MCP prompts invokable by the user as slash commands.
+A minimal prompt is a plain markdown file — the body becomes a single user message.
+Add an optional YAML frontmatter block with a description and argument definitions.
+Read akb://prompt-reference for the full authoring reference (multi-message, templates, include, naming).
 
 The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB that failed at startup or manually unmounting to free resources.
 
@@ -163,6 +167,7 @@ func run(ctx context.Context, configurer config.Interface, backendInfo string, t
 		kbs.Register,
 		newkb.Register,
 		patchkb.Register,
+		promptreference.Register,
 		purgekb.Register,
 		usekb.Register,
 	} {
