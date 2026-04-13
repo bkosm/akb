@@ -22,3 +22,16 @@ jobs:
           working-directory: go/akb
           args: --config ../../.golangci.yml
           version: v2.11.4
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/akb/go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: check
