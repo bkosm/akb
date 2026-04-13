@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "akb": {
+      "command": "bash",
+      "args": ["bin/stdio.sh", "local"]
+    }
+  }
+}

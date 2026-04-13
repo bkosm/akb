@@ -4,9 +4,10 @@
 bin/akb
 go/akb/stdio
 /stdio
-.cursor/
-.codex/
-.mcp.json
+.cursor/*
+!.cursor/mcp.json
+.codex/*
+!.codex/mcp.json
 .envrc
 .secret.envrc
 dist/
