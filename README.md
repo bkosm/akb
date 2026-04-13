@@ -61,7 +61,10 @@ flowchart TD
 ## Prerequisites
 
 - **Go 1.25+**
-- **rclone** (only needed for remote-backed KBs) — see [docs/rclone-setup.md](docs/rclone-setup.md)
+- **rclone** (only needed for remote-backed KBs) — see [docs/rclone-setup.md](docs/rclone-setup.md) or install in one line:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/bkosm/akb/main/bin/install-rclone.sh | bash
+  ```
 
 ## KB configuration
 

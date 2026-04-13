@@ -15,38 +15,24 @@ rclone is required only if you use remote-backed knowledge bases (S3, GCS, SFTP,
 > `rclone nfsmount` (NFS) does work with the Homebrew build, but for full
 > mount method support, use the official binary.
 
-**Recommended:** download the official binary from [rclone.org/downloads](https://rclone.org/downloads/):
+**Recommended:** use the installer script (detects OS and architecture automatically):
 
 ```bash
-mkdir -p ~/.bin
+# installs to /usr/local/bin (default)
+curl -fsSL https://raw.githubusercontent.com/bkosm/akb/main/bin/install-rclone.sh | bash
 
-# macOS (Apple Silicon)
-curl -O https://downloads.rclone.org/rclone-current-osx-arm64.zip
-unzip rclone-current-osx-arm64.zip
-cp rclone-*-osx-arm64/rclone ~/.bin/
-chmod +x ~/.bin/rclone
-
-# macOS (Intel)
-curl -O https://downloads.rclone.org/rclone-current-osx-amd64.zip
-unzip rclone-current-osx-amd64.zip
-cp rclone-*-osx-amd64/rclone ~/.bin/
-chmod +x ~/.bin/rclone
-
-# Linux
-curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
-unzip rclone-current-linux-amd64.zip
-cp rclone-*-linux-amd64/rclone ~/.bin/
-chmod +x ~/.bin/rclone
+# user-local install, no sudo required
+curl -fsSL https://raw.githubusercontent.com/bkosm/akb/main/bin/install-rclone.sh | bash -s -- "$HOME/.bin"
 ```
 
-Make sure `~/.bin` is on your `PATH` (add to `~/.zshrc` or `~/.bashrc`):
+If you use a custom directory, make sure it is on your `PATH` (add to `~/.zshrc` or `~/.bashrc`):
 
 ```bash
 export PATH="$HOME/.bin:$PATH"
 ```
 
-If you already have the Homebrew version installed, the official binary in
-`~/.bin` will take precedence as long as `~/.bin` appears before
+If you already have the Homebrew version installed, a user-local binary in
+`$HOME/.bin` will take precedence as long as `$HOME/.bin` appears before
 `/opt/homebrew/bin` in your `$PATH`.
 
 ## Mount methods
