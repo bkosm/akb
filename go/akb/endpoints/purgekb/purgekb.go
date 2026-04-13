@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/bkosm/akb/go/akb/config"
 	"github.com/bkosm/akb/go/akb/endpoints"
@@ -45,17 +47,32 @@ func Handle(ctx context.Context, _ *mcp.CallToolRequest, input Input) (*mcp.Call
 	}
 
 	if input.DeleteFiles {
-		// Best-effort unmount before wiping files so mounted FUSE/NFS
-		// directories are released first. Errors are intentionally ignored
-		// because the KB may not be currently mounted.
-		if mgr, mgrErr := mount.ManagerFromContext(ctx); mgrErr == nil {
-			_ = mgr.Unmount(kb.Mount)
-			mgr.Deregister(kb.Mount)
-		}
-
-		if err := os.RemoveAll(kb.Mount); err != nil {
+		// Delete the contents of the mount path (not the root directory itself)
+		// so that FUSE/NFS-mounted remote KBs propagate each deletion to the
+		// remote. os.RemoveAll on the mountpoint root fails while mounted
+		// ("resource busy"), but removing individual entries inside it works.
+		entries, err := os.ReadDir(kb.Mount)
+		if err != nil && !os.IsNotExist(err) {
 			return nil, Output{}, fmt.Errorf("delete files: %w", err)
 		}
+		for _, e := range entries {
+			if err := os.RemoveAll(filepath.Join(kb.Mount, e.Name())); err != nil {
+				return nil, Output{}, fmt.Errorf("delete files: %w", err)
+			}
+		}
+		// For remote KBs, give rclone's VFS write-back cache time to flush
+		// the deletions to the remote before the mount process is killed.
+		// Local KBs have no cache to flush.
+		if kb.RcloneRemote != "" {
+			time.Sleep(5 * time.Second)
+		}
+	}
+
+	// Always unmount and deregister, regardless of delete_files.
+	// Errors are intentionally ignored — the KB may not be currently mounted.
+	if mgr, mgrErr := mount.ManagerFromContext(ctx); mgrErr == nil {
+		_ = mgr.Unmount(kb.Mount)
+		mgr.Deregister(kb.Mount)
 	}
 
 	delete(cfg.KBs, key)
@@ -74,9 +91,9 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		Title: "Remove Knowledge Base",
 		Description: `Remove a knowledge base entry from config.
 
-If delete_files is true, all files at the KB's mount path are deleted recursively before the config entry is removed. Use with caution — this is irreversible.
+Any active mount is always unmounted on a best-effort basis.
 
-The KB is immediately removed from config. Any active mount is unmounted on a best-effort basis when delete_files is true.`,
+If delete_files is true, all files at the mount path are deleted first (through the live mount, so deletions propagate to the remote), followed by a short flush wait before the mount is torn down. Use with caution — this is irreversible.`,
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: &endpoints.BoolTrue,
 			IdempotentHint:  false,

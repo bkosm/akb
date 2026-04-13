@@ -110,8 +110,51 @@ func TestHandle_DeleteFiles_RemovesMount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
-		t.Fatal("mount directory should have been deleted")
+	// Root directory is preserved; only its contents are removed.
+	entries, statErr := os.ReadDir(dir)
+	if statErr != nil {
+		t.Fatalf("mount root should still exist: %v", statErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("mount root should be empty, got %d entries", len(entries))
+	}
+}
+
+// TestHandle_DeleteFiles_RemovesContents verifies that delete_files=true
+// removes nested files and subdirectories but leaves the root dir intact.
+func TestHandle_DeleteFiles_RemovesContents(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(subdir, "nested.txt")
+	if err := os.WriteFile(nested, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {Mount: dir},
+		},
+	}}
+	ctx := baseCtx(t, sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "my-kb", DeleteFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nested file and subdirectory must be gone.
+	if _, statErr := os.Stat(nested); !os.IsNotExist(statErr) {
+		t.Fatal("nested file should have been deleted")
+	}
+	if _, statErr := os.Stat(subdir); !os.IsNotExist(statErr) {
+		t.Fatal("subdirectory should have been deleted")
+	}
+	// Root dir must still exist.
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		t.Fatal("root mount directory should be preserved")
 	}
 }
 
@@ -183,6 +226,46 @@ func TestHandle_DeleteFiles_DeregistersManager(t *testing.T) {
 	dir2 := t.TempDir()
 	if err := mgr.Add(context.Background(), "my-kb", "", dir2, mount.MethodAuto, nil); err != nil {
 		t.Fatalf("re-Add after purge should succeed: %v", err)
+	}
+}
+
+// TestHandle_DeleteFiles_False_UnmountsManager verifies that even with
+// delete_files=false the mount manager entry is cleaned up, so a subsequent
+// Add for the same path succeeds without a "already registered" conflict.
+func TestHandle_DeleteFiles_False_UnmountsManager(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "keep.txt")
+	if err := os.WriteFile(file, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := mount.NewManager()
+	if err := mgr.Add(context.Background(), "my-kb", "", dir, mount.MethodAuto, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {Mount: dir},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "my-kb", DeleteFiles: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Files must be preserved.
+	if _, statErr := os.Stat(file); os.IsNotExist(statErr) {
+		t.Fatal("files should be preserved when delete_files=false")
+	}
+
+	// Mountpoint must be deregistered — re-Add to the same path must succeed.
+	if err := mgr.Add(context.Background(), "my-kb", "", dir, mount.MethodAuto, nil); err != nil {
+		t.Fatalf("re-Add after purge(delete_files=false) should succeed: %v", err)
 	}
 }
 
