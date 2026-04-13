@@ -66,20 +66,17 @@ func TestIntegration_ListKBs_Empty(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_kbs", Arguments: map[string]any{}})
+	result, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "akb://kbs"})
 	if err != nil {
-		t.Fatalf("list_kbs: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("list_kbs error: %v", result.Content)
+		t.Fatalf("read akb://kbs: %v", err)
 	}
 
-	text := extractText(t, result)
+	text := extractResourceText(t, result)
 	var out struct {
 		KBs []any `json:"kbs"`
 	}
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		t.Fatalf("unmarshal list_kbs output: %v\nraw: %s", err, text)
+		t.Fatalf("unmarshal akb://kbs: %v\nraw: %s", err, text)
 	}
 	if len(out.KBs) != 0 {
 		t.Fatalf("expected 0 KBs, got %d", len(out.KBs))
@@ -109,11 +106,11 @@ func TestIntegration_NewKB_Local(t *testing.T) {
 		t.Fatalf("new_kb error: %v", result.Content)
 	}
 
-	listResult, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_kbs", Arguments: map[string]any{}})
+	listResult, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "akb://kbs"})
 	if err != nil {
-		t.Fatalf("list_kbs after new_kb: %v", err)
+		t.Fatalf("read akb://kbs after new_kb: %v", err)
 	}
-	text := extractText(t, listResult)
+	text := extractResourceText(t, listResult)
 	var out struct {
 		KBs []struct {
 			Name        string `json:"name"`
@@ -184,4 +181,13 @@ func extractText(t *testing.T, result *mcp.CallToolResult) string {
 	}
 	t.Fatalf("no text content in result: %+v", result.Content)
 	return ""
+}
+
+// extractResourceText returns the text from the first resource contents entry.
+func extractResourceText(t *testing.T, result *mcp.ReadResourceResult) string {
+	t.Helper()
+	if len(result.Contents) == 0 {
+		t.Fatalf("no contents in resource result")
+	}
+	return result.Contents[0].Text
 }

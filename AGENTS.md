@@ -46,7 +46,7 @@ make vet
 
 Agents interact with KBs using standard file tools on local mount paths.
 
-1. Call `list_kbs` to discover available KBs and their mount paths
+1. Read the `akb://kbs` resource to discover available KBs and their mount paths
 2. Use standard file tools on the returned paths:
    - Read files: Read tool
    - Write files: Write tool

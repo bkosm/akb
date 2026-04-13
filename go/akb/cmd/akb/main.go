@@ -17,7 +17,6 @@ import (
 	"github.com/bkosm/akb/go/akb/endpoints"
 	endpointconfig "github.com/bkosm/akb/go/akb/endpoints/config"
 	"github.com/bkosm/akb/go/akb/endpoints/kbs"
-	"github.com/bkosm/akb/go/akb/endpoints/listkbs"
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
 	"github.com/bkosm/akb/go/akb/endpoints/patchkb"
 	"github.com/bkosm/akb/go/akb/endpoints/purgekb"
@@ -163,7 +162,6 @@ func run(ctx context.Context, configurer config.Interface, backendInfo string, t
 		endpointconfig.Register,
 		kbs.Register,
 		newkb.Register,
-		listkbs.Register,
 		patchkb.Register,
 		purgekb.Register,
 		usekb.Register,
