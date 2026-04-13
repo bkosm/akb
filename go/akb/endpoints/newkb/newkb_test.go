@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -231,10 +232,60 @@ func TestHandle_defaultMountPath(t *testing.T) {
 	}
 }
 
+func TestBuildToolDescription_noBackend(t *testing.T) {
+	t.Parallel()
+	got := buildToolDescription("")
+	if got != toolDescription {
+		t.Fatalf("expected base toolDescription unchanged, got:\n%s", got)
+	}
+}
+
+func TestBuildToolDescription_withBackend(t *testing.T) {
+	t.Parallel()
+	arn := "arn:aws:s3:eu-west-1:123456789012:akb-123456789012/config.json"
+	got := buildToolDescription(arn)
+	if !strings.Contains(got, arn) {
+		t.Errorf("description missing ARN %q", arn)
+	}
+	if !strings.Contains(got, "eu-west-1") {
+		t.Error("description missing region")
+	}
+	if !strings.Contains(got, "akb-123456789012") {
+		t.Error("description missing bucket")
+	}
+	if !strings.Contains(got, "rclone_remote") {
+		t.Error("description missing rclone_remote hint")
+	}
+	if got == toolDescription {
+		t.Error("description should differ from base when backendInfo is set")
+	}
+}
+
 func TestRegister(t *testing.T) {
 	t.Parallel()
 	srv := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
 	if err := Register(context.Background(), srv); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRegister_withBackendDescriber(t *testing.T) {
+	t.Parallel()
+	sc := newStubConfigurer(config.Config{KBs: make(map[config.Unique]config.KB)})
+	sbd := &stubBackendDescriber{stubConfigurer: sc, info: "arn:aws:s3:eu-west-1:123:akb-123/config.json"}
+	ctx := config.IntoContext(context.Background(), sbd)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
+	if err := Register(ctx, srv); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRegister_withoutBackendDescriber(t *testing.T) {
+	t.Parallel()
+	sc := newStubConfigurer(config.Config{KBs: make(map[config.Unique]config.KB)})
+	ctx := config.IntoContext(context.Background(), sc)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
+	if err := Register(ctx, srv); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -274,3 +325,11 @@ func (s *stubConfigurer) Save(_ context.Context, cfg config.Config) error {
 	s.saved = &cfg
 	return nil
 }
+
+// stubBackendDescriber wraps stubConfigurer and also implements config.BackendDescriber.
+type stubBackendDescriber struct {
+	*stubConfigurer
+	info string
+}
+
+func (s *stubBackendDescriber) BackendInfo() string { return s.info }

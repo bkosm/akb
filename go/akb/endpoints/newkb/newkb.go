@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bkosm/akb/go/akb/config"
 	"github.com/bkosm/akb/go/akb/endpoints"
@@ -119,12 +120,50 @@ Common backends:
 
 Full backend list: https://rclone.org/overview/#supported-providers`
 
+// buildToolDescription returns the tool description for new_kb. When backendInfo
+// is non-empty (S3 ARN from config.BackendDescriber), it appends the config
+// backend location and a default rclone_remote convention so agents know which
+// bucket and region to use without guessing.
+func buildToolDescription(backendInfo string) string {
+	if backendInfo == "" {
+		return toolDescription
+	}
+
+	// ARN format: arn:aws:s3:{region}:{account}:{bucket}/{key}
+	// Extract region and bucket to build the rclone_remote example.
+	parts := strings.SplitN(backendInfo, ":", 6)
+	region, bucket := "", ""
+	if len(parts) == 6 {
+		region = parts[3]
+		// resource segment is "{bucket}/{key}" — take the part before the first "/"
+		resource := parts[5]
+		if idx := strings.Index(resource, "/"); idx >= 0 {
+			bucket = resource[:idx]
+		} else {
+			bucket = resource
+		}
+	}
+
+	hint := fmt.Sprintf(
+		"\n\nConfig backend: %s\nWhen creating S3-backed KBs, unless the user specifies otherwise, use the config bucket with the KB name as a prefix:\n  rclone_remote: \":s3,env_auth=true,region=%s:%s/<kb-name>/\"",
+		backendInfo, region, bucket,
+	)
+	return toolDescription + hint
+}
+
 // Register adds the new_kb tool to the MCP server.
-var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
+var Register endpoints.RegisterFunc = func(ctx context.Context, s *mcp.Server) error {
+	backendInfo := ""
+	if cfg, err := config.FromContext(ctx); err == nil {
+		if bd, ok := cfg.(config.BackendDescriber); ok {
+			backendInfo = bd.BackendInfo()
+		}
+	}
+
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "new_kb",
 		Title:       "Create Knowledge Base",
-		Description: toolDescription,
+		Description: buildToolDescription(backendInfo),
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: &endpoints.BoolFalse,
 			OpenWorldHint:   &endpoints.BoolFalse,

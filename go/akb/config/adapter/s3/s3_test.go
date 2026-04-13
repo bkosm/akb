@@ -330,6 +330,34 @@ func TestSave_conflict(t *testing.T) {
 	}
 }
 
+func TestBackendInfo_withAccountID(t *testing.T) {
+	t.Parallel()
+	s := &S3{
+		bucket:    "akb-123456789012",
+		key:       "config.json",
+		accountID: "123456789012",
+		awsCfg:    aws.Config{Region: "eu-west-1"},
+	}
+	want := "arn:aws:s3:eu-west-1:123456789012:akb-123456789012/config.json"
+	if got := s.BackendInfo(); got != want {
+		t.Fatalf("BackendInfo() = %q, want %q", got, want)
+	}
+}
+
+func TestBackendInfo_withoutAccountID(t *testing.T) {
+	t.Parallel()
+	// Bucket provided explicitly — accountID was never resolved via STS.
+	s := &S3{
+		bucket: "my-bucket",
+		key:    "config.json",
+		awsCfg: aws.Config{Region: "eu-west-1"},
+	}
+	want := "arn:aws:s3:eu-west-1::my-bucket/config.json"
+	if got := s.BackendInfo(); got != want {
+		t.Fatalf("BackendInfo() = %q, want %q", got, want)
+	}
+}
+
 func TestBootstrap_raceSecondReaderWins(t *testing.T) {
 	t.Parallel()
 	fake := newFakeS3()

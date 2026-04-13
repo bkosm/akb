@@ -36,6 +36,13 @@ type Interface interface {
 	Save(context.Context, Config) error
 }
 
+// BackendDescriber is an optional interface that config backends can implement
+// to expose the storage location as an ARN. When present, tools use it to
+// surface hints about which bucket/region to target when creating remote KBs.
+type BackendDescriber interface {
+	BackendInfo() string
+}
+
 type ctxKey struct{}
 
 // IntoContext stores a config.Interface implementation into the context.

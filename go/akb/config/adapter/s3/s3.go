@@ -21,10 +21,11 @@ import (
 // for optimistic concurrency control; concurrent saves from different processes
 // detect conflicts and return config.ErrConflict.
 type S3 struct {
-	bucket string
-	key    string
-	client *s3svc.Client
-	awsCfg aws.Config
+	bucket    string
+	key       string
+	accountID string // resolved by ensureBucket when bucket name defaults to akb-<account-id>
+	client    *s3svc.Client
+	awsCfg    aws.Config
 
 	mu       sync.Mutex
 	lastETag string
@@ -46,6 +47,7 @@ func (s *S3) ensureBucket(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("resolve default bucket: %w", err)
 		}
+		s.accountID = acctID
 		s.bucket = "akb-" + acctID
 	}
 
@@ -196,4 +198,13 @@ func isPreconditionFailed(err error) bool {
 	return false
 }
 
+// BackendInfo returns the config storage location as an ARN of the form
+// arn:aws:s3:{region}:{account-id}:{bucket}/{key}.
+// The account-id segment is empty when the bucket was supplied explicitly
+// and the account was never resolved via STS.
+func (s *S3) BackendInfo() string {
+	return fmt.Sprintf("arn:aws:s3:%s:%s:%s/%s", s.awsCfg.Region, s.accountID, s.bucket, s.key)
+}
+
 var _ config.Interface = &S3{}
+var _ config.BackendDescriber = &S3{}
