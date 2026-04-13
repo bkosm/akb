@@ -2,6 +2,7 @@ package listkbs
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/bkosm/akb/go/akb/config"
@@ -84,8 +85,8 @@ func TestHandle_LocalDirMounted(t *testing.T) {
 	if len(out.KBs) != 1 {
 		t.Fatalf("len = %d, want 1", len(out.KBs))
 	}
-	if !out.KBs[0].Mounted {
-		t.Fatal("local dir should report as mounted")
+	if out.KBs[0].MountStatus != MountStatusMounted {
+		t.Fatalf("MountStatus = %q, want %q", out.KBs[0].MountStatus, MountStatusMounted)
 	}
 }
 
@@ -121,9 +122,9 @@ func TestHandle_RemoteKB_MountManager(t *testing.T) {
 	}
 	// The manager has the path registered as local (no remote), so IsMounted
 	// returns false; the local-dir fallback also won't fire because RcloneRemote
-	// is set. mounted must be false.
-	if out.KBs[0].Mounted {
-		t.Fatal("remote KB without an active rclone mount should report mounted=false")
+	// is set. Status must be not_mounted.
+	if out.KBs[0].MountStatus != MountStatusNotMounted {
+		t.Fatalf("MountStatus = %q, want %q", out.KBs[0].MountStatus, MountStatusNotMounted)
 	}
 }
 
@@ -154,11 +155,47 @@ func TestHandle_NoMountManager(t *testing.T) {
 	for _, kb := range out.KBs {
 		byName[kb.Name] = kb
 	}
-	if !byName["local"].Mounted {
-		t.Fatal("local KB with existing dir should report mounted=true")
+	if byName["local"].MountStatus != MountStatusMounted {
+		t.Fatalf("local MountStatus = %q, want %q", byName["local"].MountStatus, MountStatusMounted)
 	}
-	if byName["remote"].Mounted {
-		t.Fatal("remote KB without mount manager should report mounted=false")
+	if byName["remote"].MountStatus != MountStatusNotMounted {
+		t.Fatalf("remote MountStatus = %q, want %q", byName["remote"].MountStatus, MountStatusNotMounted)
+	}
+}
+
+// TestHandle_RemoteKB_MountFailed checks that a remote KB whose last Add
+// returned an error is reported with mount_status="failed" and a non-empty
+// mount_error message.
+func TestHandle_RemoteKB_MountFailed(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	mgr := mount.NewManager()
+	mountErr := fmt.Errorf("rclone mount %q at %q: exec: not found", ":s3:bucket/", dir)
+	mgr.SetMountError(dir, mountErr)
+
+	ctx := config.IntoContext(context.Background(), &stubConfigurer{
+		cfg: config.Config{
+			KBs: map[config.Unique]config.KB{
+				"remote-kb": {Mount: dir, RcloneRemote: ":s3:bucket/", Description: "remote"},
+			},
+		},
+	})
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.KBs) != 1 {
+		t.Fatalf("len = %d, want 1", len(out.KBs))
+	}
+	kb := out.KBs[0]
+	if kb.MountStatus != MountStatusFailed {
+		t.Fatalf("MountStatus = %q, want %q", kb.MountStatus, MountStatusFailed)
+	}
+	if kb.MountError == "" {
+		t.Fatal("MountError should be non-empty for a failed mount")
 	}
 }
 

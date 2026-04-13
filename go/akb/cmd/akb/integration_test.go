@@ -116,7 +116,8 @@ func TestIntegration_NewKB_Local(t *testing.T) {
 	text := extractText(t, listResult)
 	var out struct {
 		KBs []struct {
-			Name string `json:"name"`
+			Name        string `json:"name"`
+			MountStatus string `json:"mount_status"`
 		} `json:"kbs"`
 	}
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
@@ -127,6 +128,9 @@ func TestIntegration_NewKB_Local(t *testing.T) {
 	}
 	if out.KBs[0].Name != "test-kb" {
 		t.Fatalf("name = %q, want test-kb", out.KBs[0].Name)
+	}
+	if out.KBs[0].MountStatus != "mounted" {
+		t.Fatalf("mount_status = %q, want \"mounted\"", out.KBs[0].MountStatus)
 	}
 }
 

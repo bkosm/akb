@@ -47,6 +47,7 @@ type Manager struct {
 	mu              sync.Mutex
 	entries         map[string]*entry // mountpoint -> entry
 	stops           map[string]func() // mountpoint -> watcher stop func
+	mountErrs       map[string]error  // mountpoint -> last Add error (nil = no error)
 	fuseUnmountBin  string            // "fusermount3"/"fusermount" (Linux only, for FUSE unmounts)
 	hasFUSE         bool
 	preflightCalled bool
@@ -54,9 +55,42 @@ type Manager struct {
 
 func NewManager() *Manager {
 	return &Manager{
-		entries: make(map[string]*entry),
-		stops:   make(map[string]func()),
+		entries:   make(map[string]*entry),
+		stops:     make(map[string]func()),
+		mountErrs: make(map[string]error),
 	}
+}
+
+// MountError returns the error from the last failed Add for the given mountpoint,
+// or nil if the last Add succeeded or the mountpoint has never been attempted.
+func (m *Manager) MountError(mountpoint string) error {
+	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mountErrs[mountpoint]
+}
+
+// SetMountError stores or clears a mount error for the given mountpoint.
+// Pass err=nil to clear. Intended for testing.
+func (m *Manager) SetMountError(mountpoint string, err error) {
+	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err == nil {
+		delete(m.mountErrs, mountpoint)
+	} else {
+		m.mountErrs[mountpoint] = err
+	}
+}
+
+func (m *Manager) recordMountErr(mountpoint string, err error) {
+	m.mu.Lock()
+	if err != nil {
+		m.mountErrs[mountpoint] = err
+	} else {
+		delete(m.mountErrs, mountpoint)
+	}
+	m.mu.Unlock()
 }
 
 // Preflight checks that rclone is available and probes FUSE support.
@@ -129,11 +163,14 @@ func (m *Manager) resolveMethod(method Method) (Method, error) {
 // cleanup via Unmount/UnmountAll.
 // After a successful mount, Add invokes the OnMounted hook from ctx (if any)
 // and stores the returned stop func for cleanup.
-func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, method Method, extraArgs map[string]string) error {
+func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, method Method, extraArgs map[string]string) (retErr error) {
 	if mountpoint == "" {
 		return fmt.Errorf("mount path is required for all kbs")
 	}
 	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+
+	// Record the outcome against this mountpoint so callers can query MountError.
+	defer func() { m.recordMountErr(mountpoint, retErr) }()
 
 	m.mu.Lock()
 	if _, exists := m.entries[mountpoint]; exists {

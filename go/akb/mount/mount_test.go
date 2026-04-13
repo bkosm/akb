@@ -2,6 +2,7 @@ package mount
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,7 +150,7 @@ func TestAdd_EnvExpansion(t *testing.T) {
 
 func TestResolveMethod_Auto_WithFUSE(t *testing.T) {
 	t.Parallel()
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: true}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: true}
 
 	got, err := mgr.resolveMethod(MethodAuto)
 	if err != nil {
@@ -162,7 +163,7 @@ func TestResolveMethod_Auto_WithFUSE(t *testing.T) {
 
 func TestResolveMethod_Auto_NoFUSE(t *testing.T) {
 	t.Parallel()
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: false}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: false}
 
 	got, err := mgr.resolveMethod(MethodAuto)
 	if err != nil {
@@ -175,7 +176,7 @@ func TestResolveMethod_Auto_NoFUSE(t *testing.T) {
 
 func TestResolveMethod_FuseExplicit_NoFUSE(t *testing.T) {
 	t.Parallel()
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: false}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: false}
 
 	_, err := mgr.resolveMethod(MethodFuse)
 	if err == nil {
@@ -185,7 +186,7 @@ func TestResolveMethod_FuseExplicit_NoFUSE(t *testing.T) {
 
 func TestResolveMethod_FuseExplicit_WithFUSE(t *testing.T) {
 	t.Parallel()
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: true}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: true}
 
 	got, err := mgr.resolveMethod(MethodFuse)
 	if err != nil {
@@ -198,7 +199,7 @@ func TestResolveMethod_FuseExplicit_WithFUSE(t *testing.T) {
 
 func TestResolveMethod_NFS(t *testing.T) {
 	t.Parallel()
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: false}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: false}
 
 	got, err := mgr.resolveMethod(MethodNFS)
 	if err != nil {
@@ -264,7 +265,7 @@ func TestAdd_Remote_NonEmptyMountpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), hasFUSE: true, preflightCalled: true}
+	mgr := &Manager{entries: make(map[string]*entry), stops: make(map[string]func()), mountErrs: make(map[string]error), hasFUSE: true, preflightCalled: true}
 	err := mgr.Add(context.Background(), "test", ":s3,env_auth=true:bucket/", dir, MethodFuse, nil)
 	if err == nil {
 		t.Fatal("expected error for non-empty mountpoint")
@@ -279,5 +280,88 @@ func TestHasFuse(t *testing.T) {
 	mgr := NewManager()
 	if mgr.hasFuse() {
 		t.Fatal("new manager should report hasFuse=false before Preflight")
+	}
+}
+
+func TestMountError_NilForLocalDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	mgr := NewManager()
+
+	if err := mgr.Add(context.Background(), "test", "", dir, MethodAuto, nil); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := mgr.MountError(dir); err != nil {
+		t.Fatalf("MountError after successful Add = %v, want nil", err)
+	}
+}
+
+func TestMountError_NilForUnknown(t *testing.T) {
+	t.Parallel()
+	mgr := NewManager()
+	if err := mgr.MountError("/not/registered/ever"); err != nil {
+		t.Fatalf("MountError for unknown path = %v, want nil", err)
+	}
+}
+
+func TestMountError_StoredOnFailedAdd(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Write a file so the directory is non-empty; Add rejects non-empty
+	// mountpoints for remote KBs.
+	if err := os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := &Manager{
+		entries:         make(map[string]*entry),
+		stops:           make(map[string]func()),
+		mountErrs:       make(map[string]error),
+		hasFUSE:         true,
+		preflightCalled: true,
+	}
+
+	addErr := mgr.Add(context.Background(), "test", ":s3,env_auth=true:bucket/", dir, MethodFuse, nil)
+	if addErr == nil {
+		t.Fatal("expected Add to fail for non-empty mountpoint")
+	}
+	if stored := mgr.MountError(dir); stored == nil {
+		t.Fatal("MountError should return the stored error after a failed Add")
+	}
+	if stored := mgr.MountError(dir); stored.Error() != addErr.Error() {
+		t.Fatalf("MountError = %v, want %v", stored, addErr)
+	}
+}
+
+func TestMountError_ClearedOnSuccess(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	mgr := NewManager()
+
+	// Pre-seed an error via SetMountError.
+	mgr.SetMountError(dir, fmt.Errorf("previous failure"))
+
+	// A successful local Add should clear the stored error.
+	if err := mgr.Add(context.Background(), "test", "", dir, MethodAuto, nil); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := mgr.MountError(dir); err != nil {
+		t.Fatalf("MountError after successful Add = %v, want nil", err)
+	}
+}
+
+func TestSetMountError(t *testing.T) {
+	t.Parallel()
+	mgr := NewManager()
+	dir := t.TempDir()
+
+	mgr.SetMountError(dir, fmt.Errorf("injected error"))
+	if err := mgr.MountError(dir); err == nil {
+		t.Fatal("expected stored error")
+	}
+
+	mgr.SetMountError(dir, nil)
+	if err := mgr.MountError(dir); err != nil {
+		t.Fatalf("expected nil after clearing, got %v", err)
 	}
 }
