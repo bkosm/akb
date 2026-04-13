@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 // DefaultRcloneArgs are the baseline flags applied to every rclone mount/nfsmount
@@ -212,6 +213,9 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 				return fmt.Errorf("mountpoint %q is not empty; remote mounts require an empty directory", mountpoint)
 			}
 		}
+		if err := m.probeRemote(ctx, remote); err != nil {
+			return err
+		}
 		cmd, err := m.rcloneMount(remote, mountpoint, resolved, extraArgs)
 		if err != nil {
 			return err
@@ -248,6 +252,21 @@ func (m *Manager) runAndClearStopFunc(mountpoint string) {
 	if ok && stop != nil {
 		stop()
 	}
+}
+
+// probeRemote runs "rclone lsd <remote> --max-depth 0" with a 15-second
+// timeout to verify the remote is reachable before committing to a full mount.
+// Returns a descriptive error (including rclone stderr) on failure.
+func (m *Manager) probeRemote(ctx context.Context, remote string) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "rclone", "lsd", remote, "--max-depth", "0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("remote probe %q: %s: %w",
+			remote, strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // rcloneMount starts rclone as a direct child process (no --daemon).

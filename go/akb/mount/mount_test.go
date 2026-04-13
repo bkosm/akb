@@ -365,3 +365,61 @@ func TestSetMountError(t *testing.T) {
 		t.Fatalf("expected nil after clearing, got %v", err)
 	}
 }
+
+// writeFakeRclone creates a temporary directory containing a shell script
+// named "rclone" that runs the given script body, prepends the dir to PATH,
+// and returns the directory path.
+func writeFakeRclone(t *testing.T, script string) {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "rclone")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Dir(bin)+":"+os.Getenv("PATH"))
+}
+
+func TestProbeRemote_Failure(t *testing.T) {
+	// lsd exits 1 with a message; mount/nfsmount would exit 0 but is never reached.
+	writeFakeRclone(t, `[ "$1" = "lsd" ] && echo "NoSuchBucket" >&2 && exit 1; exit 0`)
+
+	mgr := NewManager()
+	err := mgr.probeRemote(context.Background(), ":s3:no-such-bucket/")
+	if err == nil {
+		t.Fatal("expected probe to fail for bad remote")
+	}
+	if !strings.Contains(err.Error(), "NoSuchBucket") {
+		t.Fatalf("error should contain stderr output, got: %v", err)
+	}
+}
+
+func TestAdd_Remote_ProbeBlocks(t *testing.T) {
+	// lsd fails; mount/nfsmount would succeed but should never be called.
+	writeFakeRclone(t, `[ "$1" = "lsd" ] && echo "NoSuchBucket" >&2 && exit 1; exit 0`)
+
+	dir := t.TempDir()
+	mgr := &Manager{
+		entries:         make(map[string]*entry),
+		stops:           make(map[string]func()),
+		mountErrs:       make(map[string]error),
+		hasFUSE:         true,
+		preflightCalled: true,
+	}
+
+	err := mgr.Add(context.Background(), "test", ":s3:no-such-bucket/", dir, MethodFuse, nil)
+	if err == nil {
+		t.Fatal("expected Add to fail when probe fails")
+	}
+	if !strings.Contains(err.Error(), "NoSuchBucket") {
+		t.Fatalf("error should mention probe output, got: %v", err)
+	}
+	if stored := mgr.MountError(dir); stored == nil {
+		t.Fatal("MountError should be stored after a failed probe")
+	}
+	// The mountpoint must not appear as registered (rcloneMount was never called).
+	mgr.mu.Lock()
+	_, registered := mgr.entries[dir]
+	mgr.mu.Unlock()
+	if registered {
+		t.Fatal("mountpoint should not be registered after probe failure")
+	}
+}
