@@ -1,5 +1,18 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'go/akb/**'
+      - '.golangci.yml'
+      - 'Makefile'
+      - '.goreleaser.yml'
+  pull_request:
+    paths:
+      - 'go/akb/**'
+      - '.golangci.yml'
+      - 'Makefile'
+      - '.goreleaser.yml'
 jobs:
   test:
     runs-on: ubuntu-latest
