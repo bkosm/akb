@@ -27,12 +27,10 @@ const (
 
 // KBInfo describes a single knowledge base entry.
 type KBInfo struct {
-	Description  string      `json:"description,omitempty"`
-	Mount        string      `json:"mount"`
-	Method       string      `json:"mount_method,omitempty"`
-	RcloneRemote string      `json:"rclone_remote,omitempty"`
-	MountStatus  MountStatus `json:"mount_status"`
-	MountError   string      `json:"mount_error,omitempty"`
+	config.KB
+	ResolvedMountPath string      `json:"resolved_mount_path"`
+	MountStatus       MountStatus `json:"mount_status"`
+	MountError        string      `json:"mount_error,omitempty"`
 }
 
 func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -70,12 +68,10 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 		}
 
 		kbMap[string(name)] = KBInfo{
-			Description:  entry.Description,
-			Mount:        resolved,
-			Method:       entry.Method,
-			RcloneRemote: entry.RcloneRemote,
-			MountStatus:  status,
-			MountError:   mountErrMsg,
+			KB:                entry,
+			ResolvedMountPath: resolved,
+			MountStatus:       status,
+			MountError:        mountErrMsg,
 		}
 	}
 
@@ -102,10 +98,10 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		Name:  "kbs",
 		Title: "Knowledge Bases",
 		Description: `Knowledge bases with live mount status. Same map shape as akb://config (name as key), extended with:
+  - resolved_mount_path: expanded, absolute path to use with file tools (Read, Write, Glob, Grep)
   - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
   - mount_error: present only when mount_status is "failed"
 
-Use mount as the local path for file tools (Read, Write, Glob, Grep).
 Only "mounted" KBs are ready for use; "not_mounted" means startup is still in progress.`,
 		MIMEType: "application/json",
 		Annotations: &mcp.Annotations{
