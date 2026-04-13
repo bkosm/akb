@@ -30,14 +30,19 @@ import (
 // version is set at build time via -ldflags "-X main.version=<version>".
 var version = "dev"
 
-const serverInstructions = `AKB (Agentic Knowledge Base) is a remote knowledge base orchestrator for cross-repo and cross-host agent knowledge sharing.
+const serverInstructionsBase = `AKB (Agentic Knowledge Base) is a remote knowledge base orchestrator for cross-repo and cross-host agent knowledge sharing.
 
 It mounts local or remote directories (backed by any rclone-supported storage: S3, GCS, SFTP, etc.) so agents can read and write knowledge using standard file tools.
 
 Workflow:
-  1. Call list_kbs to discover available KBs and their mount paths.
+  1. Read the akb://kbs resource to discover available KBs, their mount paths, and whether each is local or remote-backed.
   2. Use standard file tools (Read, Write, Glob, Grep) on the returned mount paths — all configured KBs are auto-mounted on server startup.
   3. Use new_kb to register additional knowledge bases (local directories or remote storage).
+
+Two independent dimensions:
+  - Config backend: where the KB registry (list of KBs) is stored — either a local file or an S3 object.
+  - KB storage: where each KB's files actually live — either a local directory or a rclone remote (S3, GCS, SFTP, …).
+  Any combination is valid. A local-config server can have S3-backed KBs; an S3-config server can have local-directory KBs.
 
 Prompts are auto-discovered from *.prompt.md files in KBs. Write a .prompt.md file to any KB and it becomes a slash-command prompt automatically.
 
@@ -45,6 +50,15 @@ The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB tha
 
 Use patch_kb to update KB connection settings. Changes to config take effect after MCP server restart.
 Use purge_kb to remove a KB from config, optionally deleting all files at its mount path.`
+
+// buildServerInstructions returns the MCP server instructions, appending a
+// config-backend identity line so agents can distinguish server instances.
+func buildServerInstructions(backendInfo string) string {
+	if backendInfo == "" {
+		return serverInstructionsBase
+	}
+	return serverInstructionsBase + fmt.Sprintf("\n\nConfig backend: %s", backendInfo)
+}
 
 func main() {
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -104,13 +118,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(ctx, configurer, &mcp.StdioTransport{}); err != nil {
+	backendInfo := ""
+	if bd, ok := configurer.(config.BackendDescriber); ok {
+		backendInfo = bd.BackendInfo()
+	}
+
+	if err := run(ctx, configurer, backendInfo, &mcp.StdioTransport{}); err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, configurer config.Interface, transport mcp.Transport) error {
+func run(ctx context.Context, configurer config.Interface, backendInfo string, transport mcp.Transport) error {
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -131,7 +150,7 @@ func run(ctx context.Context, configurer config.Interface, transport mcp.Transpo
 			Version: version,
 		},
 		&mcp.ServerOptions{
-			Instructions: serverInstructions,
+			Instructions: buildServerInstructions(backendInfo),
 			Capabilities: &mcp.ServerCapabilities{
 				Logging:   &mcp.LoggingCapabilities{},
 				Prompts:   &mcp.PromptCapabilities{ListChanged: true},

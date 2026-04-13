@@ -28,12 +28,13 @@ const (
 
 // KBInfo describes a single knowledge base entry.
 type KBInfo struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	Mount       string      `json:"mount"`
-	Method      string      `json:"mount_method,omitempty"`
-	MountStatus MountStatus `json:"mount_status"`
-	MountError  string      `json:"mount_error,omitempty"`
+	Name         string      `json:"name"`
+	Description  string      `json:"description,omitempty"`
+	Mount        string      `json:"mount"`
+	Method       string      `json:"mount_method,omitempty"`
+	RcloneRemote string      `json:"rclone_remote,omitempty"`
+	MountStatus  MountStatus `json:"mount_status"`
+	MountError   string      `json:"mount_error,omitempty"`
 }
 
 func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -71,12 +72,13 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 		}
 
 		kbs = append(kbs, KBInfo{
-			Name:        string(name),
-			Description: entry.Description,
-			Mount:       resolved,
-			Method:      entry.Method,
-			MountStatus: status,
-			MountError:  mountErrMsg,
+			Name:         string(name),
+			Description:  entry.Description,
+			Mount:        resolved,
+			Method:       entry.Method,
+			RcloneRemote: entry.RcloneRemote,
+			MountStatus:  status,
+			MountError:   mountErrMsg,
 		})
 	}
 	sort.Slice(kbs, func(i, j int) bool { return kbs[i].Name < kbs[j].Name })
@@ -105,7 +107,12 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		Title: "Knowledge Bases",
 		Description: `List of all configured knowledge bases with their mount paths and status.
 
-Each entry includes a mount path and a mount_status field ("mounted", "not_mounted", or "failed"). All KBs are auto-mounted at server startup, so mounted KBs are ready for immediate use with standard file tools (Read, Write, Glob, Grep) on the mount path.
+Each entry includes:
+  - mount: local path to use with file tools (Read, Write, Glob, Grep)
+  - mount_status: "mounted", "not_mounted", or "failed"
+  - rclone_remote: present only for remote-backed KBs (S3, GCS, SFTP, …); absent means a plain local directory
+
+All KBs are auto-mounted at server startup, so mounted KBs are ready for immediate use.
 
 Subscribe to this resource to receive notifications when mount status changes (e.g. a KB finishes mounting or is unmounted).`,
 		MIMEType: "application/json",

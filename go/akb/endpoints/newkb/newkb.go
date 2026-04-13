@@ -131,17 +131,19 @@ func buildToolDescription(backendInfo string) string {
 
 	// ARN format: arn:aws:s3:{region}:{account}:{bucket}/{key}
 	// Extract region and bucket to build the rclone_remote example.
+	// If parsing fails (e.g. backendInfo is a local file path), show only the
+	// backend location without the S3-specific hint.
 	parts := strings.SplitN(backendInfo, ":", 6)
-	region, bucket := "", ""
-	if len(parts) == 6 {
-		region = parts[3]
-		// resource segment is "{bucket}/{key}" — take the part before the first "/"
-		resource := parts[5]
-		if idx := strings.Index(resource, "/"); idx >= 0 {
-			bucket = resource[:idx]
-		} else {
-			bucket = resource
-		}
+	if len(parts) != 6 {
+		return toolDescription + fmt.Sprintf("\n\nConfig backend: %s", backendInfo)
+	}
+
+	region := parts[3]
+	// resource segment is "{bucket}/{key}" — take the part before the first "/"
+	resource := parts[5]
+	bucket := resource
+	if idx := strings.Index(resource, "/"); idx >= 0 {
+		bucket = resource[:idx]
 	}
 
 	hint := fmt.Sprintf(

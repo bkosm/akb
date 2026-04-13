@@ -63,4 +63,11 @@ func (l *LocalFS) Save(_ context.Context, c config.Config) error {
 	return nil
 }
 
+// BackendInfo returns the resolved path of the local config file,
+// implementing config.BackendDescriber.
+func (l *LocalFS) BackendInfo() string {
+	return l.resolvedPath()
+}
+
 var _ config.Interface = &LocalFS{}
+var _ config.BackendDescriber = &LocalFS{}

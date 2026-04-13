@@ -69,7 +69,7 @@ func TestRun(t *testing.T) {
 			defer cancel()
 			configurer := &configlocalfs.LocalFS{Path: cfgPath}
 			_, srvT := mcp.NewInMemoryTransports()
-			err := run(ctx, configurer, srvT)
+			err := run(ctx, configurer, configurer.BackendInfo(), srvT)
 			if !tt.wantErr(err) {
 				t.Fatalf("run: err = %v", err)
 			}
