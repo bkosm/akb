@@ -88,7 +88,7 @@ Each KB entry in the config has these fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `mount` | yes | Local directory path. FUSE/NFS mountpoint when `rclone_remote` is set, otherwise a plain local directory. |
+| `mount` | yes | Local directory path. FUSE/NFS mountpoint when `rclone_remote` is set, otherwise a plain local directory. For remote KBs, omitting mount is usually sufficient — the server defaults to `$HOME/.akb/mounts/<name>`. If specified, use portable env var prefixes like `$HOME` (e.g. `$HOME/.akb/mounts/my-kb`). |
 | `rclone_remote` | no | rclone remote spec. Omit for a plain local directory. Format: `:backend,opt=val:bucket/path`. See [rclone docs](https://rclone.org/overview/#syntax-of-remote-paths). |
 | `mount_method` | no | `"fuse"`, `"nfs"`, or omit for auto. |
 | `rclone_args` | no | Flag overrides as `{"flag-name": "value"}` (without `--` prefix). Empty value for boolean flags. Merged on top of defaults. |
