@@ -49,6 +49,12 @@ A minimal prompt is a plain markdown file — the body becomes a single user mes
 Add an optional YAML frontmatter block with a description and argument definitions.
 Read akb://prompt-reference for the full authoring reference (multi-message, templates, include, naming).
 
+Mount path convention:
+  When creating a new KB scoped to the current project, set mount to .akb/<name> under the
+  repository root (resolved to an absolute path, e.g. /Users/me/my-repo/.akb/my-kb).
+  Ensure .akb is listed in the repository's .gitignore so KB content is never committed.
+  For global KBs shared across projects, $HOME/.akb/mounts/<name> is a good default.
+
 The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB that failed at startup or manually unmounting to free resources.
 
 Use patch_kb to update KB connection settings. Changes to config take effect after MCP server restart.

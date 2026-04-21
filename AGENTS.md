@@ -54,6 +54,8 @@ Agents interact with KBs using standard file tools on local mount paths.
    - Search content: Grep tool
 3. Call `new_kb` to create a new knowledge base
 
+**Mount path convention:** for project-scoped KBs, mount at `.akb/<name>` under the repository root and ensure `.akb` is in the repo's `.gitignore`. For global KBs, use `$HOME/.akb/mounts/<name>`.
+
 KBs can be backed by remote storage (mounted via rclone FUSE) or plain local directories. The agent doesn't need to know the difference — it just reads and writes files at the mount path.
 
 ## Prompts

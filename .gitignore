@@ -1,6 +1,7 @@
 **/*.secret.*
 **/tmp
 **/.aws*
+.akb/
 bin/akb
 go/akb/stdio
 /stdio
