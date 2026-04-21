@@ -51,9 +51,12 @@ Read akb://prompt-reference for the full authoring reference (multi-message, tem
 
 Mount path convention:
   When creating a new KB scoped to the current project, set mount to .akb/<name> under the
-  repository root (resolved to an absolute path, e.g. /Users/me/my-repo/.akb/my-kb).
+  repository root (e.g. $HOME/my-repo/.akb/my-kb).
   Ensure .akb is listed in the repository's .gitignore so KB content is never committed.
   For global KBs shared across projects, $HOME/.akb/mounts/<name> is a good default.
+  All config fields support $ENV_VAR expansion at runtime. When using a remote config backend
+  (S3), always use env var prefixes like $HOME instead of bare absolute paths so configs stay
+  portable across developers and machines. Local config backends can use absolute paths.
 
 The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB that failed at startup or manually unmounting to free resources.
 

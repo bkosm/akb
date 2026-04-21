@@ -13,7 +13,7 @@ import (
 type Input struct {
 	Name         string            `json:"name" jsonschema:"the config key of the KB entry to edit"`
 	RcloneRemote *string           `json:"rclone_remote,omitempty" jsonschema:"new rclone remote path spec. Set empty string to switch to plain local mode. Format ':backend,opt=val:bucket/path'. See https://rclone.org/overview/#syntax-of-remote-paths"`
-	Mount        *string           `json:"mount,omitempty" jsonschema:"new local mount path. For project-scoped KBs, prefer .akb/<name> under the repository root (absolute path). For global KBs, use $HOME/.akb/mounts/<name>."`
+	Mount        *string           `json:"mount,omitempty" jsonschema:"new local mount path. For project-scoped KBs, prefer .akb/<name> under the repository root. Use env var prefixes like $HOME for portability when using a remote config backend. For global KBs, use $HOME/.akb/mounts/<name>."`
 	Method       *string           `json:"mount_method,omitempty" jsonschema:"mount strategy: 'fuse' (requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE), or empty string for auto. Ignored for local directories."`
 	RcloneArgs   map[string]string `json:"rclone_args,omitempty" jsonschema:"rclone flag overrides keyed by flag name without '--'. Replaces the entire rclone_args map when provided. See https://rclone.org/commands/rclone_mount/#options"`
 	Description  *string           `json:"description,omitempty" jsonschema:"new description for the KB"`

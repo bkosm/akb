@@ -76,7 +76,7 @@ Each KB entry in the config has these fields:
 ```json
 {
   "rclone_remote": ":s3,provider=AWS,env_auth=true,region=eu-west-1:my-bucket/prefix/",
-  "mount": "/Users/me/my-repo/.akb/my-kb",
+  "mount": "$HOME/my-repo/.akb/my-kb",
   "mount_method": "nfs",
   "rclone_args": {
     "vfs-cache-max-size": "5G",
@@ -88,11 +88,13 @@ Each KB entry in the config has these fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `mount` | yes | Local directory path. For project-scoped KBs, prefer `.akb/<name>` under the repository root (e.g. `/Users/me/my-repo/.akb/my-kb`) and add `.akb` to the repo's `.gitignore`. For global KBs shared across projects, use `$HOME/.akb/mounts/<name>`. For remote KBs, omitting mount defaults to `$HOME/.akb/mounts/<name>`. |
+| `mount` | yes | Local directory path. For project-scoped KBs, prefer `.akb/<name>` under the repository root (e.g. `$HOME/my-repo/.akb/my-kb`) and add `.akb` to the repo's `.gitignore`. For global KBs shared across projects, use `$HOME/.akb/mounts/<name>`. For remote KBs, omitting mount defaults to `$HOME/.akb/mounts/<name>`. |
 | `rclone_remote` | no | rclone remote spec. Omit for a plain local directory. Format: `:backend,opt=val:bucket/path`. See [rclone docs](https://rclone.org/overview/#syntax-of-remote-paths). |
 | `mount_method` | no | `"fuse"`, `"nfs"`, or omit for auto. |
 | `rclone_args` | no | Flag overrides as `{"flag-name": "value"}` (without `--` prefix). Empty value for boolean flags. Merged on top of defaults. |
 | `description` | no | Human-readable description. |
+
+All KB config fields (`mount`, `rclone_remote`, `rclone_args`) support `$ENV_VAR` expansion at runtime. When using a remote config backend (S3), always use env var prefixes (e.g. `$HOME`) instead of bare absolute paths so configs stay portable across developers and machines. Local config backends can use absolute paths.
 
 ### Default rclone args
 

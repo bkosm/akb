@@ -17,7 +17,7 @@ import (
 type Input struct {
 	Name         string            `json:"name" jsonschema:"the unique name for this knowledge base"`
 	RcloneRemote string            `json:"rclone_remote,omitempty" jsonschema:"rclone remote path spec. Omit for a plain local directory. Format ':backend,opt=val:bucket/path'. Examples: ':s3,env_auth=true,region=us-east-1:my-bucket/prefix/'. See https://rclone.org/overview/#syntax-of-remote-paths"`
-	Mount        string            `json:"mount" jsonschema:"local path. For project-scoped KBs, prefer .akb/<name> under the repository root (absolute path). For global KBs, use $HOME/.akb/mounts/<name>. When rclone_remote is set and mount is omitted, defaults to $HOME/.akb/mounts/<name>."`
+	Mount        string            `json:"mount" jsonschema:"local path. For project-scoped KBs, prefer .akb/<name> under the repository root. Use env var prefixes like $HOME for portability when using a remote config backend. For global KBs, use $HOME/.akb/mounts/<name>. When rclone_remote is set and mount is omitted, defaults to $HOME/.akb/mounts/<name>."`
 	Method       string            `json:"mount_method,omitempty" jsonschema:"how to mount the remote: 'fuse' (rclone mount, requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE needed), or omit for auto (prefer FUSE, fall back to NFS). Ignored for local directories."`
 	RcloneArgs   map[string]string `json:"rclone_args,omitempty" jsonschema:"rclone flag overrides keyed by flag name without '--'. Merged on top of defaults (vfs-cache-mode=full, vfs-cache-max-size=1G, etc). Empty value for boolean flags (e.g. {\"read-only\": \"\"}). See https://rclone.org/commands/rclone_mount/#options"`
 	Description  string            `json:"description,omitempty" jsonschema:"human-readable description of the knowledge base"`
@@ -108,10 +108,12 @@ Two modes:
   2. Local (rclone_remote omitted): uses an existing local directory directly.
 
 Mount path:
-  For project-scoped KBs, use .akb/<name> under the repository root (resolved to an absolute
-  path, e.g. /Users/me/my-repo/.akb/notes). Ensure .akb is in the repo's .gitignore.
+  For project-scoped KBs, use .akb/<name> under the repository root (e.g. $HOME/my-repo/.akb/notes).
+  Ensure .akb is in the repo's .gitignore.
   For global KBs shared across projects, use $HOME/.akb/mounts/<name>.
   Remote KBs: omit to accept the default ($HOME/.akb/mounts/<name>).
+  All config fields support $ENV_VAR expansion. When using a remote config backend (S3), always
+  use env var prefixes like $HOME for portability. Local config backends can use absolute paths.
 
 mount_method (remote only, optional):
   - omit/auto: prefer FUSE mount, fall back to NFS if FUSE unavailable
