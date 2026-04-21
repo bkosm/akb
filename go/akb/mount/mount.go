@@ -170,6 +170,8 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 		return fmt.Errorf("mount path is required for all kbs")
 	}
 	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+	remote = os.ExpandEnv(remote)
+	method = Method(os.ExpandEnv(string(method)))
 
 	// Record the outcome against this mountpoint so callers can query MountError.
 	defer func() { m.recordMountErr(mountpoint, retErr) }()
@@ -290,7 +292,7 @@ func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArg
 		merged[k] = v
 	}
 	for k, v := range extraArgs {
-		merged[k] = v
+		merged[os.ExpandEnv(k)] = os.ExpandEnv(v)
 	}
 
 	args := []string{subcmd, remote, mountpoint}
