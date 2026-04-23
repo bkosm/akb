@@ -3,7 +3,6 @@ package usekb
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -85,10 +84,6 @@ func TestHandle_RemoteKB_MountPreflightFails(t *testing.T) {
 }
 
 func TestHandle_RemoteKB_MountSuccess(t *testing.T) {
-	if _, err := exec.LookPath("rclone"); err != nil {
-		t.Skip("rclone not installed")
-	}
-
 	dir := t.TempDir()
 	sc := &stubConfigurer{cfg: config.Config{
 		KBs: map[config.Unique]config.KB{
