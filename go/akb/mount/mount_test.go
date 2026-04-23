@@ -180,7 +180,7 @@ func TestAdd_ExtraArgsEnvExpansion(t *testing.T) {
 	writeFakeRclone(t, `
 if [ "$1" = "lsd" ]; then exit 0; fi
 echo "$@" >&2
-sleep 60
+sleep 0.5
 `)
 
 	t.Setenv("TEST_CACHE_SIZE", "42G")
