@@ -87,6 +87,19 @@ The `auto` mount method (the default when `mount_method` is omitted) handles
 this transparently: it checks for FUSE availability and falls back to NFS if
 FUSE is not installed.
 
+## macOS metadata files
+
+macOS and some FUSE drivers may create AppleDouble sidecar files (`._*`) and
+`.DS_Store` files when writing through mounted directories. AKB treats these as
+disposable metadata artifacts.
+
+On macOS, AKB passes rclone metadata-suppression flags where supported
+(`noappledouble`, `noapplexattr`). Some FUSE drivers can still leak sidecars, so
+AKB also removes `._*` and `.DS_Store` files from remote mounts before
+`use_kb sync` and before graceful unmount write-back waits.
+
+Do not store intentional KB content in files named `._*` or `.DS_Store`.
+
 ## Docker containers
 
 Remote KBs **cannot** be mounted when running AKB inside Docker on macOS. This is a Docker Desktop limitation, not an rclone or AKB limitation.

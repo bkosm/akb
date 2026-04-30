@@ -108,8 +108,10 @@ These are applied to every mount unless overridden via `rclone_args`:
 | `dir-cache-time` | `30s` | Directory listing cache |
 | `poll-interval` | `15s` | Remote change polling |
 | `vfs-write-back` | `5s` | Delay before flushing writes to remote |
-| `daemon` | *(bool)* | Run mount in background |
-| `daemon-wait` | `30s` | Max time to wait for daemon startup |
+
+On macOS, AKB also passes rclone's Apple metadata suppression flags where supported (`noappledouble`, `noapplexattr`) and removes disposable `._*` / `.DS_Store` artifacts before remote sync and graceful unmount.
+
+AKB runs rclone as a tracked child process, so `daemon` is not supported in `rclone_args`.
 
 ## Prompts
 
@@ -169,6 +171,22 @@ Review the code I'm about to share.
 ### Async startup mounts
 
 KBs are mounted in a background goroutine that runs **concurrently** with the MCP server. Tools are available immediately, but remote KBs may not yet be mounted when the first request arrives. Use `use_kb` to mount explicitly if needed.
+
+### Agent discovery
+
+Agents should read `akb://kbs` as the single discovery resource. It includes each KB's config fields, `resolved_mount_path`, live `mount_status`, optional `mount_error`, and remote `rclone_durability` timings.
+
+Only use standard file tools on KBs whose `mount_status` is `"mounted"`.
+
+### Remote KB durability
+
+Remote KB writes go through rclone's VFS cache before reaching the object store. By default, `vfs-write-back` is `5s`.
+
+After writing to a remote KB, call `use_kb` with `action: "sync"`. This waits for the effective write-back window plus a small grace buffer and verifies that the tracked rclone mount process is still healthy. It is not a confirmed S3/object-store commit.
+
+When AKB exits normally because stdio closes, `SIGINT`, or `SIGTERM`, it also gives remote mounts the same bounded write-back grace before unmounting. Hard process death such as `SIGKILL` cannot run cleanup.
+
+Remote changes made from another host may take roughly `poll-interval` / `dir-cache-time` to appear locally. Object stores are last-writer-wins for shared files; use unique append-only files for multi-agent records instead of concurrent appends to the same object.
 
 ### Config backend concurrency
 

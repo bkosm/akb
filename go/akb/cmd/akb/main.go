@@ -34,14 +34,17 @@ const serverInstructionsBase = `AKB (Agentic Knowledge Base) is a remote knowled
 It mounts local or remote directories (backed by any rclone-supported storage: S3, GCS, SFTP, etc.) so agents can read and write knowledge using standard file tools.
 
 Workflow:
-  1. Read the akb://kbs resource to discover available KBs, their mount paths, and whether each is local or remote-backed.
-  2. Use standard file tools (Read, Write, Glob, Grep) on the returned mount paths — all configured KBs are auto-mounted on server startup.
-  3. Use new_kb to register additional knowledge bases (local directories or remote storage).
+  1. Read the akb://kbs resource to discover available KBs, config fields, resolved mount paths, and live mount status.
+  2. Use standard file tools (Read, Write, Glob, Grep) only on KBs whose mount_status is "mounted".
+  3. After writing to a remote-backed KB, call use_kb with action "sync" to wait for rclone's write-back window and verify mount health.
+  4. Use new_kb to register additional knowledge bases (local directories or remote storage).
 
 Two independent dimensions:
   - Config backend: where the KB registry (list of KBs) is stored — either a local file or an S3 object.
   - KB storage: where each KB's files actually live — either a local directory or a rclone remote (S3, GCS, SFTP, …).
   Any combination is valid. A local-config server can have S3-backed KBs; an S3-config server can have local-directory KBs.
+
+The akb://kbs resource is the single discovery resource for agents. It is a superset of raw KB config: it includes config fields, resolved_mount_path, mount_status, mount_error, and remote durability timings where applicable.
 
 Prompts are auto-discovered from *.prompt.md files in KBs and become MCP prompts invokable by the user as slash commands.
 A minimal prompt is a plain markdown file — the body becomes a single user message.
@@ -57,7 +60,14 @@ Mount path convention:
   (S3), always use env var prefixes like $HOME instead of bare absolute paths so configs stay
   portable across developers and machines. Local config backends can use absolute paths.
 
-The use_kb tool is only needed for troubleshooting — e.g. re-mounting a KB that failed at startup or manually unmounting to free resources.
+The use_kb tool is used for troubleshooting and remote write safety — e.g. re-mounting a KB that failed at startup, manually unmounting to free resources, or action "sync" after writes to a remote KB.
+
+Remote KB durability contract:
+  - use_kb action "sync" is timer and mount-health based; it is not a confirmed S3/object-store commit.
+  - rclone write-back defaults to 5s, so sync waits for the effective write-back window plus a small grace buffer.
+  - remote changes from other hosts may take roughly poll-interval/dir-cache-time to appear locally.
+  - shared-file writes are last-writer-wins on object stores; use unique append-only files for multi-agent records.
+  - macOS metadata artifacts such as ._* and .DS_Store are disposable and may be cleaned from remote mounts.
 
 Use patch_kb to update KB connection settings. Changes to config take effect after MCP server restart.
 Use purge_kb to remove a KB from config, optionally deleting all files at its mount path.`

@@ -13,6 +13,9 @@ make build
 # Run all tests
 make test
 
+# Run full local verification
+make checks
+
 # Run tests for a specific package
 go test ./go/akb/endpoints/newkb/
 go test -run TestFunctionName ./go/akb/...
@@ -46,17 +49,20 @@ make vet
 
 Agents interact with KBs using standard file tools on local mount paths.
 
-1. Read the `akb://kbs` resource to discover available KBs and their mount paths
-2. Use standard file tools on the returned paths:
+1. Read the `akb://kbs` resource to discover available KBs, their config fields, resolved mount paths, and mount status.
+2. Use standard file tools only on KBs whose `mount_status` is `"mounted"`:
    - Read files: Read tool
    - Write files: Write tool
    - Find files: Glob tool
    - Search content: Grep tool
-3. Call `new_kb` to create a new knowledge base
+3. After writing to a remote-backed KB, call `use_kb` with `action: "sync"` to wait through rclone's write-back window and verify mount health.
+4. Call `new_kb` to create a new knowledge base.
 
 **Mount path convention:** for project-scoped KBs, mount at `.akb/<name>` under the repository root and ensure `.akb` is in the repo's `.gitignore`. For global KBs, use `$HOME/.akb/mounts/<name>`.
 
-KBs can be backed by remote storage (mounted via rclone FUSE) or plain local directories. The agent doesn't need to know the difference — it just reads and writes files at the mount path.
+KBs can be backed by remote storage (mounted via rclone FUSE/NFS) or plain local directories. `use_kb sync` is timer and mount-health based; it is not a confirmed S3/object-store commit. Remote changes from other hosts may take roughly `poll-interval` / `dir-cache-time` to appear locally. Shared-file writes are last-writer-wins, so use unique append-only files for multi-agent records.
+
+macOS metadata artifacts such as `._*` and `.DS_Store` are disposable. AKB suppresses them where rclone supports it and may remove them from remote mounts before sync/unmount.
 
 ## Prompts
 
@@ -118,7 +124,7 @@ Each KB in config has these fields:
 - `rclone_remote` (optional) — rclone remote path spec (e.g. `:s3,env_auth=true:bucket/prefix/`)
 - `mount` — local directory path (FUSE/NFS mountpoint when remote, or plain local dir)
 - `mount_method` (optional) — `"fuse"`, `"nfs"`, or empty for auto (prefer FUSE, fall back to NFS)
-- `rclone_args` (optional) — `map[string]string` flag overrides merged on top of defaults
+- `rclone_args` (optional) — `map[string]string` flag overrides merged on top of defaults; `daemon` is not supported because AKB tracks rclone as a child process
 - `description` (optional) — human-readable description
 
 When `rclone_remote` is set, the mount manager starts `rclone mount` or `rclone nfsmount` depending on the resolved mount method. When empty, `mount` is used as a plain local directory. See [README.md](README.md) for rclone installation caveats and mount method details.
@@ -133,7 +139,7 @@ Each package under `endpoints/` exports a single `Register(ctx context.Context, 
 
 ### Async startup mounts
 
-KBs are mounted in a background goroutine that runs concurrently with `server.Run`. MCP tools are immediately available after startup, but remote KBs may not be mounted yet when the first request arrives. Mount failures are logged to stderr; they do not prevent the server from starting or serving local KBs.
+KBs are mounted in a background goroutine that runs concurrently with `server.Run`. MCP tools are immediately available after startup, but remote KBs may not be mounted yet when the first request arrives. Mount failures are surfaced through `akb://kbs` as `mount_status: "failed"` with `mount_error`; they do not prevent the server from starting or serving local KBs.
 
 ### Config backend concurrency
 
