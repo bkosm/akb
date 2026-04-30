@@ -59,6 +59,17 @@ type RcloneDurabilitySettings struct {
 	PollInterval string `json:"poll_interval"`
 }
 
+// MountDetails describes the concrete rclone mount mode and best-effort OS
+// verification details for a registered remote KB.
+type MountDetails struct {
+	RcloneSubcommand string `json:"rclone_subcommand"`
+	FuseProvider     string `json:"fuse_provider,omitempty"`
+	FuseDetectedFrom string `json:"fuse_detected_from,omitempty"`
+	FuseUnmountBin   string `json:"fuse_unmount_binary,omitempty"`
+	OSMountType      string `json:"os_mount_type,omitempty"`
+	OSMountSource    string `json:"os_mount_source,omitempty"`
+}
+
 // SyncResult describes the assurance AKB can provide after a mount sync wait.
 type SyncResult struct {
 	Assurance string
@@ -88,13 +99,27 @@ type entry struct {
 
 // Manager tracks rclone mounts and plain local directories.
 type Manager struct {
-	mu              sync.Mutex
-	entries         map[string]*entry // mountpoint -> entry
-	stops           map[string]func() // mountpoint -> watcher stop func
-	mountErrs       map[string]error  // mountpoint -> last Add error (nil = no error)
-	fuseUnmountBin  string            // "fusermount3"/"fusermount" (Linux only, for FUSE unmounts)
-	hasFUSE         bool
-	preflightCalled bool
+	mu               sync.Mutex
+	entries          map[string]*entry // mountpoint -> entry
+	stops            map[string]func() // mountpoint -> watcher stop func
+	mountErrs        map[string]error  // mountpoint -> last Add error (nil = no error)
+	fuseUnmountBin   string            // "fusermount3"/"fusermount" (Linux only, for FUSE unmounts)
+	fuseProvider     string            // "macfuse"/"osxfuse"/"fuse-t" when known
+	fuseDetectedFrom string            // path or probe that established FUSE availability
+	hasFUSE          bool
+	preflightCalled  bool
+}
+
+type fuseProbeResult struct {
+	available    bool
+	provider     string
+	detectedFrom string
+	unmountBin   string
+}
+
+type osMountInfo struct {
+	source string
+	fsType string
 }
 
 func NewManager() *Manager {
@@ -146,24 +171,17 @@ func (m *Manager) Preflight() error {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// cgofuse probes these dylibs in order: macFUSE, osxfuse, FUSE-T.
-		// Also check the .fs bundles used by older installers.
-		m.hasFUSE = pathExists("/usr/local/lib/libfuse.2.dylib") ||
-			pathExists("/usr/local/lib/libosxfuse.2.dylib") ||
-			pathExists("/usr/local/lib/libfuse-t.dylib") ||
-			pathExists("/Library/Filesystems/macfuse.fs") ||
-			pathExists("/Library/Filesystems/fuse-t.fs")
+		probe := probeDarwinFuse(pathExists)
+		m.hasFUSE = probe.available
+		m.fuseProvider = probe.provider
+		m.fuseDetectedFrom = probe.detectedFrom
 
 	case "linux":
-		if pathExists("/dev/fuse") {
-			if bin, err := exec.LookPath("fusermount3"); err == nil {
-				m.fuseUnmountBin = bin
-				m.hasFUSE = true
-			} else if bin, err := exec.LookPath("fusermount"); err == nil {
-				m.fuseUnmountBin = bin
-				m.hasFUSE = true
-			}
-		}
+		probe := probeLinuxFuse(pathExists, exec.LookPath)
+		m.hasFUSE = probe.available
+		m.fuseProvider = probe.provider
+		m.fuseDetectedFrom = probe.detectedFrom
+		m.fuseUnmountBin = probe.unmountBin
 
 	default:
 		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
@@ -176,6 +194,48 @@ func (m *Manager) Preflight() error {
 // hasFuse reports whether a FUSE library was detected during Preflight.
 func (m *Manager) hasFuse() bool {
 	return m.hasFUSE
+}
+
+func probeDarwinFuse(pathExistsFn func(string) bool) fuseProbeResult {
+	// cgofuse probes these dylibs in order: macFUSE, osxfuse, FUSE-T.
+	// Also check the .fs bundles used by older installers.
+	probes := []struct {
+		path     string
+		provider string
+	}{
+		{path: "/usr/local/lib/libfuse.2.dylib", provider: "macfuse"},
+		{path: "/usr/local/lib/libosxfuse.2.dylib", provider: "osxfuse"},
+		{path: "/usr/local/lib/libfuse-t.dylib", provider: "fuse-t"},
+		{path: "/Library/Filesystems/macfuse.fs", provider: "macfuse"},
+		{path: "/Library/Filesystems/fuse-t.fs", provider: "fuse-t"},
+	}
+	for _, probe := range probes {
+		if pathExistsFn(probe.path) {
+			return fuseProbeResult{
+				available:    true,
+				provider:     probe.provider,
+				detectedFrom: probe.path,
+			}
+		}
+	}
+	return fuseProbeResult{}
+}
+
+func probeLinuxFuse(pathExistsFn func(string) bool, lookPathFn func(string) (string, error)) fuseProbeResult {
+	if !pathExistsFn("/dev/fuse") {
+		return fuseProbeResult{}
+	}
+	for _, name := range []string{"fusermount3", "fusermount"} {
+		bin, err := lookPathFn(name)
+		if err == nil {
+			return fuseProbeResult{
+				available:    true,
+				detectedFrom: "/dev/fuse + " + bin,
+				unmountBin:   bin,
+			}
+		}
+	}
+	return fuseProbeResult{}
 }
 
 // EffectiveRcloneArgs returns the validated rclone args after applying
@@ -271,6 +331,53 @@ func (m *Manager) resolveMethod(method Method) (Method, error) {
 		}
 		return MethodNFS, nil
 	}
+}
+
+// ResolvedMethod returns the concrete mount method chosen for a registered
+// remote KB. It reports false for local directories and unknown mountpoints.
+func (m *Manager) ResolvedMethod(mountpoint string) (Method, bool) {
+	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	e, ok := m.entries[mountpoint]
+	if !ok || e.remote == "" || e.method == MethodAuto || e.exited {
+		return "", false
+	}
+	return e.method, true
+}
+
+// MountDetails returns concrete rclone mount details for a registered remote KB.
+// OS mount-table fields are best effort and omitted when unavailable.
+func (m *Manager) MountDetails(mountpoint string) (MountDetails, bool) {
+	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+
+	m.mu.Lock()
+	e, ok := m.entries[mountpoint]
+	if !ok || e.remote == "" || e.method == MethodAuto || e.exited {
+		m.mu.Unlock()
+		return MountDetails{}, false
+	}
+	method := e.method
+	fuseProvider := m.fuseProvider
+	fuseDetectedFrom := m.fuseDetectedFrom
+	fuseUnmountBin := m.fuseUnmountBin
+	m.mu.Unlock()
+
+	details := MountDetails{
+		RcloneSubcommand: rcloneSubcommand(method),
+	}
+	if method == MethodFuse {
+		details.FuseProvider = fuseProvider
+		details.FuseDetectedFrom = fuseDetectedFrom
+		details.FuseUnmountBin = fuseUnmountBin
+	}
+	if info, ok := lookupOSMountInfo(mountpoint); ok {
+		details.OSMountType = info.fsType
+		details.OSMountSource = info.source
+	}
+	return details, true
 }
 
 // Add registers a KB path. If remote is non-empty, starts an rclone mount at
@@ -399,10 +506,7 @@ func (m *Manager) probeRemote(ctx context.Context, remote string) error {
 // rcloneMount starts rclone as a direct child process (no --daemon).
 // Returns the running Cmd so the caller can track and kill it.
 func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArgs map[string]string) (*exec.Cmd, error) {
-	subcmd := "mount"
-	if method == MethodNFS {
-		subcmd = "nfsmount"
-	}
+	subcmd := rcloneSubcommand(method)
 
 	merged, err := EffectiveRcloneArgs(extraArgs)
 	if err != nil {
@@ -431,6 +535,13 @@ func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArg
 	}
 
 	return cmd, nil
+}
+
+func rcloneSubcommand(method Method) string {
+	if method == MethodNFS {
+		return "nfsmount"
+	}
+	return "mount"
 }
 
 func (m *Manager) watchRclone(e *entry) {
@@ -693,36 +804,86 @@ func (m *Manager) IsMounted(mountpoint string) bool {
 }
 
 func (m *Manager) checkMount(mountpoint string) bool {
+	_, ok := lookupOSMountInfo(mountpoint)
+	return ok
+}
+
+func lookupOSMountInfo(mountpoint string) (osMountInfo, bool) {
 	// Resolve symlinks so /tmp matches /private/tmp on macOS.
 	if resolved, err := filepath.EvalSymlinks(mountpoint); err == nil {
 		mountpoint = resolved
 	}
-
 	switch runtime.GOOS {
 	case "linux":
 		data, err := os.ReadFile("/proc/mounts")
 		if err != nil {
-			return false
+			return osMountInfo{}, false
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && fields[1] == mountpoint {
-				return true
-			}
-		}
-		return false
+		return parseLinuxMounts(string(data), mountpoint)
 
 	case "darwin":
 		out, err := exec.Command("mount").Output()
 		if err != nil {
-			return false
+			return osMountInfo{}, false
 		}
-		target := " on " + mountpoint + " "
-		return strings.Contains(string(out), target)
+		return parseDarwinMountOutput(string(out), mountpoint)
 
 	default:
-		return false
+		return osMountInfo{}, false
 	}
+}
+
+func parseLinuxMounts(data, mountpoint string) (osMountInfo, bool) {
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		target := unescapeProcMountField(fields[1])
+		if target == mountpoint {
+			return osMountInfo{
+				source: unescapeProcMountField(fields[0]),
+				fsType: fields[2],
+			}, true
+		}
+	}
+	return osMountInfo{}, false
+}
+
+func parseDarwinMountOutput(data, mountpoint string) (osMountInfo, bool) {
+	for _, line := range strings.Split(data, "\n") {
+		onIdx := strings.Index(line, " on ")
+		if onIdx < 0 {
+			continue
+		}
+		rest := line[onIdx+len(" on "):]
+		detailIdx := strings.LastIndex(rest, " (")
+		if detailIdx < 0 {
+			continue
+		}
+		target := rest[:detailIdx]
+		if target != mountpoint {
+			continue
+		}
+		details := strings.TrimSuffix(rest[detailIdx+len(" ("):], ")")
+		fsType, _, _ := strings.Cut(details, ",")
+		return osMountInfo{
+			source: line[:onIdx],
+			fsType: strings.TrimSpace(fsType),
+		}, true
+	}
+	return osMountInfo{}, false
+}
+
+func unescapeProcMountField(field string) string {
+	replacer := strings.NewReplacer(
+		`\\`, `\`,
+		`\040`, " ",
+		`\011`, "\t",
+		`\012`, "\n",
+		`\134`, `\`,
+	)
+	return replacer.Replace(field)
 }
 
 // unmountAll unmounts all registered remote mounts. Called by the cleanup func

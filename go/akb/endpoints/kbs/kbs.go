@@ -28,10 +28,19 @@ const (
 // KBInfo describes a single knowledge base entry.
 type KBInfo struct {
 	config.KB
-	ResolvedMountPath string                          `json:"resolved_mount_path"`
-	MountStatus       MountStatus                     `json:"mount_status"`
-	MountError        string                          `json:"mount_error,omitempty"`
-	RcloneDurability  *mount.RcloneDurabilitySettings `json:"rclone_durability,omitempty"`
+	ResolvedMountPath   string                          `json:"resolved_mount_path"`
+	MountStatus         MountStatus                     `json:"mount_status"`
+	MountError          string                          `json:"mount_error,omitempty"`
+	ResolvedMountMethod string                          `json:"resolved_mount_method,omitempty"`
+	MountDetails        *mount.MountDetails             `json:"mount_details,omitempty"`
+	RcloneDurability    *mount.RcloneDurabilitySettings `json:"rclone_durability,omitempty"`
+}
+
+type mountState interface {
+	IsMounted(string) bool
+	MountError(string) error
+	ResolvedMethod(string) (mount.Method, bool)
+	MountDetails(string) (mount.MountDetails, bool)
 }
 
 func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -45,50 +54,12 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 		return nil, fmt.Errorf("retrieve config: %w", err)
 	}
 
-	mgr, _ := mount.ManagerFromContext(ctx)
-
-	kbMap := make(map[string]KBInfo, len(cfg.KBs))
-	for name, entry := range cfg.KBs {
-		resolved := filepath.Clean(os.ExpandEnv(entry.Mount))
-
-		status := MountStatusNotMounted
-		mountErrMsg := ""
-		var rcloneDurability *mount.RcloneDurabilitySettings
-
-		if entry.RcloneRemote != "" {
-			settings, settingsErr := mount.RcloneDurability(entry.RcloneArgs)
-			if settingsErr != nil {
-				status = MountStatusFailed
-				mountErrMsg = settingsErr.Error()
-			} else {
-				rcloneDurability = &settings
-			}
-		}
-
-		switch {
-		case status == MountStatusFailed:
-		case mgr != nil && mgr.IsMounted(entry.Mount):
-			status = MountStatusMounted
-		case entry.RcloneRemote == "":
-			if fi, err := os.Stat(resolved); err == nil && fi.IsDir() {
-				status = MountStatusMounted
-			}
-		case mgr != nil:
-			if err := mgr.MountError(entry.Mount); err != nil {
-				status = MountStatusFailed
-				mountErrMsg = err.Error()
-			}
-		}
-
-		kbMap[string(name)] = KBInfo{
-			KB:                entry,
-			ResolvedMountPath: resolved,
-			MountStatus:       status,
-			MountError:        mountErrMsg,
-			RcloneDurability:  rcloneDurability,
-		}
+	var mounts mountState
+	if mgr, _ := mount.ManagerFromContext(ctx); mgr != nil {
+		mounts = mgr
 	}
 
+	kbMap := buildKBMap(cfg, mounts)
 	data, err := json.MarshalIndent(struct {
 		KBs map[string]KBInfo `json:"kbs"`
 	}{KBs: kbMap}, "", "  ")
@@ -105,6 +76,63 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 	}, nil
 }
 
+func buildKBMap(cfg config.Config, mounts mountState) map[string]KBInfo {
+	kbMap := make(map[string]KBInfo, len(cfg.KBs))
+	for name, entry := range cfg.KBs {
+		resolved := filepath.Clean(os.ExpandEnv(entry.Mount))
+
+		status := MountStatusNotMounted
+		mountErrMsg := ""
+		resolvedMountMethod := ""
+		var mountDetails *mount.MountDetails
+		var rcloneDurability *mount.RcloneDurabilitySettings
+
+		if entry.RcloneRemote != "" {
+			settings, settingsErr := mount.RcloneDurability(entry.RcloneArgs)
+			if settingsErr != nil {
+				status = MountStatusFailed
+				mountErrMsg = settingsErr.Error()
+			} else {
+				rcloneDurability = &settings
+			}
+		}
+
+		switch {
+		case status == MountStatusFailed:
+		case mounts != nil && mounts.IsMounted(entry.Mount):
+			status = MountStatusMounted
+			if entry.RcloneRemote != "" {
+				if method, ok := mounts.ResolvedMethod(entry.Mount); ok {
+					resolvedMountMethod = string(method)
+				}
+				if details, ok := mounts.MountDetails(entry.Mount); ok {
+					mountDetails = &details
+				}
+			}
+		case entry.RcloneRemote == "":
+			if fi, err := os.Stat(resolved); err == nil && fi.IsDir() {
+				status = MountStatusMounted
+			}
+		case mounts != nil:
+			if err := mounts.MountError(entry.Mount); err != nil {
+				status = MountStatusFailed
+				mountErrMsg = err.Error()
+			}
+		}
+
+		kbMap[string(name)] = KBInfo{
+			KB:                  entry,
+			ResolvedMountPath:   resolved,
+			MountStatus:         status,
+			MountError:          mountErrMsg,
+			ResolvedMountMethod: resolvedMountMethod,
+			MountDetails:        mountDetails,
+			RcloneDurability:    rcloneDurability,
+		}
+	}
+	return kbMap
+}
+
 // Register adds the akb://kbs MCP resource to the server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
 	s.AddResource(&mcp.Resource{
@@ -115,6 +143,8 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
   - resolved_mount_path: expanded, absolute path to use with file tools (Read, Write, Glob, Grep)
   - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
   - mount_error: present only when mount_status is "failed"
+  - resolved_mount_method: concrete remote mount method selected by the mount manager ("fuse" or "nfs")
+  - mount_details: concrete rclone subcommand plus best-effort FUSE and OS mount-table diagnostics
   - rclone_durability: effective remote write-back/backsync timings for remote KBs
 
 Only "mounted" KBs are ready for use; "not_mounted" means startup is still in progress.`,

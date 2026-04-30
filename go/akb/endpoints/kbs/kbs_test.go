@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/bkosm/akb/go/akb/config"
@@ -17,6 +18,31 @@ type stubConfigurer struct {
 
 func (s *stubConfigurer) Retrieve(context.Context) (config.Config, error) { return s.cfg, nil }
 func (s *stubConfigurer) Save(context.Context, config.Config) error       { return nil }
+
+type stubMountState struct {
+	mounted map[string]bool
+	errs    map[string]error
+	methods map[string]mount.Method
+	details map[string]mount.MountDetails
+}
+
+func (s *stubMountState) IsMounted(mountpoint string) bool {
+	return s.mounted[mountpoint]
+}
+
+func (s *stubMountState) MountError(mountpoint string) error {
+	return s.errs[mountpoint]
+}
+
+func (s *stubMountState) ResolvedMethod(mountpoint string) (mount.Method, bool) {
+	method, ok := s.methods[mountpoint]
+	return method, ok
+}
+
+func (s *stubMountState) MountDetails(mountpoint string) (mount.MountDetails, bool) {
+	details, ok := s.details[mountpoint]
+	return details, ok
+}
 
 func parseKBs(t *testing.T, result *mcp.ReadResourceResult) map[string]KBInfo {
 	t.Helper()
@@ -229,6 +255,66 @@ func TestHandler_RemoteKB_InvalidRcloneArgs(t *testing.T) {
 	}
 	if kb.MountError == "" {
 		t.Fatal("MountError should describe invalid rclone args")
+	}
+}
+
+func TestBuildKBMap_RemoteKB_MountDetails(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	state := &stubMountState{
+		mounted: map[string]bool{dir: true},
+		methods: map[string]mount.Method{dir: mount.MethodFuse},
+		details: map[string]mount.MountDetails{
+			dir: {
+				RcloneSubcommand: "mount",
+				FuseProvider:     "fuse-t",
+				FuseDetectedFrom: "/Library/Filesystems/fuse-t.fs",
+				OSMountType:      "fuse.rclone",
+				OSMountSource:    ":s3:bucket",
+			},
+		},
+	}
+	cfg := config.Config{KBs: map[config.Unique]config.KB{
+		"remote-kb": {Mount: dir, RcloneRemote: ":s3:bucket/"},
+	}}
+
+	kb := buildKBMap(cfg, state)["remote-kb"]
+	if kb.MountStatus != MountStatusMounted {
+		t.Fatalf("MountStatus = %q, want %q", kb.MountStatus, MountStatusMounted)
+	}
+	if kb.ResolvedMountMethod != "fuse" {
+		t.Fatalf("ResolvedMountMethod = %q, want fuse", kb.ResolvedMountMethod)
+	}
+	if kb.MountDetails == nil {
+		t.Fatal("MountDetails should be present")
+	}
+	if kb.MountDetails.RcloneSubcommand != "mount" ||
+		kb.MountDetails.FuseProvider != "fuse-t" ||
+		kb.MountDetails.OSMountType != "fuse.rclone" ||
+		kb.MountDetails.OSMountSource != ":s3:bucket" {
+		t.Fatalf("MountDetails = %#v", kb.MountDetails)
+	}
+}
+
+func TestMountDetails_OmitsOptionalFuseFields(t *testing.T) {
+	t.Parallel()
+	data, err := json.Marshal(KBInfo{
+		ResolvedMountPath:   "/tmp/kb",
+		MountStatus:         MountStatusMounted,
+		ResolvedMountMethod: "nfs",
+		MountDetails: &mount.MountDetails{
+			RcloneSubcommand: "nfsmount",
+			OSMountType:      "nfs",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "fuse_provider") {
+		t.Fatalf("fuse_provider should be omitted: %s", data)
+	}
+	if strings.Contains(string(data), "fuse_unmount_binary") {
+		t.Fatalf("fuse_unmount_binary should be omitted: %s", data)
 	}
 }
 

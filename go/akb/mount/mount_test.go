@@ -304,6 +304,144 @@ func TestResolveMethod_NFS(t *testing.T) {
 	}
 }
 
+func TestResolvedMethod(t *testing.T) {
+	t.Parallel()
+	mgr := NewManager()
+
+	if _, ok := mgr.ResolvedMethod("/not/registered"); ok {
+		t.Fatal("unknown mountpoint should not have a resolved method")
+	}
+
+	localDir := t.TempDir()
+	mgr.entries[localDir] = &entry{mountpoint: localDir}
+	if _, ok := mgr.ResolvedMethod(localDir); ok {
+		t.Fatal("local directory should not have a resolved method")
+	}
+
+	remoteDir := filepath.Join(t.TempDir(), "remote")
+	mgr.entries[remoteDir] = &entry{
+		remote:     ":memory:",
+		mountpoint: remoteDir,
+		method:     MethodNFS,
+	}
+	got, ok := mgr.ResolvedMethod(remoteDir)
+	if !ok {
+		t.Fatal("remote mount should have a resolved method")
+	}
+	if got != MethodNFS {
+		t.Fatalf("ResolvedMethod = %q, want %q", got, MethodNFS)
+	}
+}
+
+func TestMountDetails(t *testing.T) {
+	t.Parallel()
+	remoteDir := filepath.Join(t.TempDir(), "remote")
+	mgr := NewManager()
+	mgr.fuseProvider = "fuse-t"
+	mgr.fuseDetectedFrom = "/Library/Filesystems/fuse-t.fs"
+	mgr.entries[remoteDir] = &entry{
+		remote:     ":memory:",
+		mountpoint: remoteDir,
+		method:     MethodFuse,
+	}
+
+	got, ok := mgr.MountDetails(remoteDir)
+	if !ok {
+		t.Fatal("remote mount should have details")
+	}
+	if got.RcloneSubcommand != "mount" {
+		t.Fatalf("RcloneSubcommand = %q, want mount", got.RcloneSubcommand)
+	}
+	if got.FuseProvider != "fuse-t" {
+		t.Fatalf("FuseProvider = %q, want fuse-t", got.FuseProvider)
+	}
+	if got.FuseDetectedFrom != "/Library/Filesystems/fuse-t.fs" {
+		t.Fatalf("FuseDetectedFrom = %q", got.FuseDetectedFrom)
+	}
+	if got.FuseUnmountBin != "" {
+		t.Fatalf("FuseUnmountBin should be empty on non-Linux probe, got %q", got.FuseUnmountBin)
+	}
+}
+
+func TestProbeDarwinFuse(t *testing.T) {
+	t.Parallel()
+	paths := map[string]bool{
+		"/usr/local/lib/libosxfuse.2.dylib": true,
+		"/usr/local/lib/libfuse-t.dylib":    true,
+	}
+	got := probeDarwinFuse(func(path string) bool { return paths[path] })
+	if !got.available {
+		t.Fatal("expected FUSE to be available")
+	}
+	if got.provider != "osxfuse" {
+		t.Fatalf("provider = %q, want osxfuse", got.provider)
+	}
+	if got.detectedFrom != "/usr/local/lib/libosxfuse.2.dylib" {
+		t.Fatalf("detectedFrom = %q", got.detectedFrom)
+	}
+}
+
+func TestProbeLinuxFuse(t *testing.T) {
+	t.Parallel()
+	got := probeLinuxFuse(
+		func(path string) bool { return path == "/dev/fuse" },
+		func(name string) (string, error) {
+			if name == "fusermount3" {
+				return "/usr/bin/fusermount3", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	)
+	if !got.available {
+		t.Fatal("expected FUSE to be available")
+	}
+	if got.provider != "" {
+		t.Fatalf("Linux probe should not claim a provider, got %q", got.provider)
+	}
+	if got.unmountBin != "/usr/bin/fusermount3" {
+		t.Fatalf("unmountBin = %q", got.unmountBin)
+	}
+	if got.detectedFrom != "/dev/fuse + /usr/bin/fusermount3" {
+		t.Fatalf("detectedFrom = %q", got.detectedFrom)
+	}
+}
+
+func TestParseLinuxMounts(t *testing.T) {
+	t.Parallel()
+	data := strings.Join([]string{
+		"rootfs / ext4 rw 0 0",
+		"rclone\\040remote /mnt/kb\\040one fuse.rclone rw,nosuid,nodev 0 0",
+	}, "\n")
+	got, ok := parseLinuxMounts(data, "/mnt/kb one")
+	if !ok {
+		t.Fatal("expected mount entry")
+	}
+	if got.source != "rclone remote" {
+		t.Fatalf("source = %q", got.source)
+	}
+	if got.fsType != "fuse.rclone" {
+		t.Fatalf("fsType = %q", got.fsType)
+	}
+}
+
+func TestParseDarwinMountOutput(t *testing.T) {
+	t.Parallel()
+	data := strings.Join([]string{
+		"/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)",
+		":s3:bucket on /Users/me/kb (fuse.rclone, nodev, nosuid, mounted by me)",
+	}, "\n")
+	got, ok := parseDarwinMountOutput(data, "/Users/me/kb")
+	if !ok {
+		t.Fatal("expected mount entry")
+	}
+	if got.source != ":s3:bucket" {
+		t.Fatalf("source = %q", got.source)
+	}
+	if got.fsType != "fuse.rclone" {
+		t.Fatalf("fsType = %q", got.fsType)
+	}
+}
+
 func TestDefaultRcloneArgs(t *testing.T) {
 	t.Parallel()
 	if _, ok := DefaultRcloneArgs["vfs-cache-mode"]; !ok {
