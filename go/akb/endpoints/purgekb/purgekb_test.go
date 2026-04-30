@@ -229,6 +229,33 @@ func TestHandle_DeleteFiles_DeregistersManager(t *testing.T) {
 	}
 }
 
+func TestHandle_DeleteFiles_RemoteSyncFailurePreservesConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := mount.NewManager()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"remote-kb": {Mount: dir, RcloneRemote: ":s3:bucket/"},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", DeleteFiles: true})
+	if err == nil {
+		t.Fatal("expected sync failure for unregistered remote mount")
+	}
+	if !strings.Contains(err.Error(), "sync deleted remote files") {
+		t.Fatalf("error = %q, want sync context", err)
+	}
+	if sc.saved != nil {
+		t.Fatal("config should not be saved when remote deletion sync is uncertain")
+	}
+}
+
 // TestHandle_DeleteFiles_False_UnmountsManager verifies that even with
 // delete_files=false the mount manager entry is cleaned up, so a subsequent
 // Add for the same path succeeds without a "already registered" conflict.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/bkosm/akb/go/akb/config"
 	"github.com/bkosm/akb/go/akb/endpoints"
@@ -60,11 +59,14 @@ func Handle(ctx context.Context, _ *mcp.CallToolRequest, input Input) (*mcp.Call
 				return nil, Output{}, fmt.Errorf("delete files: %w", err)
 			}
 		}
-		// For remote KBs, give rclone's VFS write-back cache time to flush
-		// the deletions to the remote before the mount process is killed.
-		// Local KBs have no cache to flush.
 		if kb.RcloneRemote != "" {
-			time.Sleep(5 * time.Second)
+			mgr, mgrErr := mount.ManagerFromContext(ctx)
+			if mgrErr != nil {
+				return nil, Output{}, fmt.Errorf("sync deleted remote files: %w", mgrErr)
+			}
+			if _, err := mgr.Sync(kb.Mount); err != nil {
+				return nil, Output{}, fmt.Errorf("sync deleted remote files: %w", err)
+			}
 		}
 	}
 
