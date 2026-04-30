@@ -2,7 +2,7 @@ GO_MODULE := ./go/akb/...
 BIN       := bin/akb
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint fmt vet integration docker-build docker-run release-snapshot clean
+.PHONY: build test lint fmt vet integration checks docker-build docker-run release-snapshot clean
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BIN) ./go/akb/cmd/akb/
@@ -21,6 +21,8 @@ vet:
 
 integration:
 	go test -race -tags=integration $(GO_MODULE)
+
+checks: test lint fmt vet integration
 
 docker-build:
 	docker build -t akb:local .

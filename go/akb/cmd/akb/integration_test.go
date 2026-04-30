@@ -73,7 +73,7 @@ func TestIntegration_ListKBs_Empty(t *testing.T) {
 
 	text := extractResourceText(t, result)
 	var out struct {
-		KBs []any `json:"kbs"`
+		KBs map[string]any `json:"kbs"`
 	}
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
 		t.Fatalf("unmarshal akb://kbs: %v\nraw: %s", err, text)
@@ -112,8 +112,7 @@ func TestIntegration_NewKB_Local(t *testing.T) {
 	}
 	text := extractResourceText(t, listResult)
 	var out struct {
-		KBs []struct {
-			Name        string `json:"name"`
+		KBs map[string]struct {
 			MountStatus string `json:"mount_status"`
 		} `json:"kbs"`
 	}
@@ -123,11 +122,12 @@ func TestIntegration_NewKB_Local(t *testing.T) {
 	if len(out.KBs) != 1 {
 		t.Fatalf("expected 1 KB, got %d", len(out.KBs))
 	}
-	if out.KBs[0].Name != "test-kb" {
-		t.Fatalf("name = %q, want test-kb", out.KBs[0].Name)
+	kb, ok := out.KBs["test-kb"]
+	if !ok {
+		t.Fatalf("expected test-kb entry, got: %#v", out.KBs)
 	}
-	if out.KBs[0].MountStatus != "mounted" {
-		t.Fatalf("mount_status = %q, want \"mounted\"", out.KBs[0].MountStatus)
+	if kb.MountStatus != "mounted" {
+		t.Fatalf("mount_status = %q, want \"mounted\"", kb.MountStatus)
 	}
 }
 
