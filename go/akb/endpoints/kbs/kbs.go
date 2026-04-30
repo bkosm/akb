@@ -111,7 +111,7 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		URI:   ResourceURI,
 		Name:  "kbs",
 		Title: "Knowledge Bases",
-		Description: `Knowledge bases with live mount status. Same map shape as akb://config (name as key), extended with:
+		Description: `Knowledge bases with config, resolved mount paths, and live mount status (name as key):
   - resolved_mount_path: expanded, absolute path to use with file tools (Read, Write, Glob, Grep)
   - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
   - mount_error: present only when mount_status is "failed"

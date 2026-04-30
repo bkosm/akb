@@ -15,7 +15,6 @@ import (
 	configlocalfs "github.com/bkosm/akb/go/akb/config/adapter/localfs"
 	configs3 "github.com/bkosm/akb/go/akb/config/adapter/s3"
 	"github.com/bkosm/akb/go/akb/endpoints"
-	endpointconfig "github.com/bkosm/akb/go/akb/endpoints/config"
 	"github.com/bkosm/akb/go/akb/endpoints/kbs"
 	"github.com/bkosm/akb/go/akb/endpoints/newkb"
 	"github.com/bkosm/akb/go/akb/endpoints/patchkb"
@@ -172,7 +171,6 @@ func run(ctx context.Context, configurer config.Interface, backendInfo string, t
 	)
 
 	for _, register := range []endpoints.RegisterFunc{
-		endpointconfig.Register,
 		kbs.Register,
 		newkb.Register,
 		patchkb.Register,
