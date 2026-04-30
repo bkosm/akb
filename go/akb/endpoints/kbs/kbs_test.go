@@ -170,6 +170,68 @@ func TestHandler_RemoteKB_MountFailed(t *testing.T) {
 	}
 }
 
+func TestHandler_RemoteKB_RcloneDurability(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ctx := config.IntoContext(context.Background(), &stubConfigurer{
+		cfg: config.Config{
+			KBs: map[config.Unique]config.KB{
+				"remote-kb": {
+					Mount:        dir,
+					RcloneRemote: ":s3:bucket/",
+					RcloneArgs: map[string]string{
+						"vfs-write-back": "1s",
+						"dir-cache-time": "2s",
+						"poll-interval":  "3s",
+					},
+				},
+			},
+		},
+	})
+
+	result, err := handler(ctx, &mcp.ReadResourceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb := parseKBs(t, result)["remote-kb"]
+	if kb.RcloneDurability == nil {
+		t.Fatal("RcloneDurability should be present for remote KB")
+	}
+	if kb.RcloneDurability.VFSWriteBack != "1s" ||
+		kb.RcloneDurability.DirCacheTime != "2s" ||
+		kb.RcloneDurability.PollInterval != "3s" {
+		t.Fatalf("RcloneDurability = %#v", kb.RcloneDurability)
+	}
+}
+
+func TestHandler_RemoteKB_InvalidRcloneArgs(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ctx := config.IntoContext(context.Background(), &stubConfigurer{
+		cfg: config.Config{
+			KBs: map[config.Unique]config.KB{
+				"remote-kb": {
+					Mount:        dir,
+					RcloneRemote: ":s3:bucket/",
+					RcloneArgs:   map[string]string{"daemon": ""},
+				},
+			},
+		},
+	})
+
+	result, err := handler(ctx, &mcp.ReadResourceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb := parseKBs(t, result)["remote-kb"]
+	if kb.MountStatus != MountStatusFailed {
+		t.Fatalf("MountStatus = %q, want %q", kb.MountStatus, MountStatusFailed)
+	}
+	if kb.MountError == "" {
+		t.Fatal("MountError should describe invalid rclone args")
+	}
+}
+
 func TestHandler_ResponseShape(t *testing.T) {
 	t.Parallel()
 	ctx := config.IntoContext(context.Background(), &stubConfigurer{cfg: config.Config{}})

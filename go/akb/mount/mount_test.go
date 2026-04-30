@@ -312,6 +312,63 @@ func TestDefaultRcloneArgs(t *testing.T) {
 	}
 }
 
+func TestEffectiveRcloneArgs_MergesAndExpands(t *testing.T) {
+	t.Setenv("TEST_CACHE_SIZE", "42G")
+
+	args, err := EffectiveRcloneArgs(map[string]string{
+		"vfs-cache-max-size": "$TEST_CACHE_SIZE",
+		"new-flag":           "value",
+	})
+	if err != nil {
+		t.Fatalf("EffectiveRcloneArgs: %v", err)
+	}
+	if args["vfs-cache-mode"] != "full" {
+		t.Fatalf("default vfs-cache-mode = %q, want full", args["vfs-cache-mode"])
+	}
+	if args["vfs-cache-max-size"] != "42G" {
+		t.Fatalf("override vfs-cache-max-size = %q, want 42G", args["vfs-cache-max-size"])
+	}
+	if args["new-flag"] != "value" {
+		t.Fatalf("new-flag = %q, want value", args["new-flag"])
+	}
+}
+
+func TestEffectiveRcloneArgs_RejectsDaemon(t *testing.T) {
+	if _, err := EffectiveRcloneArgs(map[string]string{"daemon": ""}); err == nil {
+		t.Fatal("expected daemon arg to be rejected")
+	}
+}
+
+func TestRcloneWriteBackDuration(t *testing.T) {
+	got, err := RcloneWriteBackDuration(map[string]string{"vfs-write-back": "250ms"})
+	if err != nil {
+		t.Fatalf("RcloneWriteBackDuration: %v", err)
+	}
+	if got != 250*time.Millisecond {
+		t.Fatalf("duration = %v, want 250ms", got)
+	}
+}
+
+func TestRcloneWriteBackDuration_Invalid(t *testing.T) {
+	if _, err := RcloneWriteBackDuration(map[string]string{"vfs-write-back": "soon"}); err == nil {
+		t.Fatal("expected invalid duration error")
+	}
+}
+
+func TestRcloneDurability(t *testing.T) {
+	got, err := RcloneDurability(map[string]string{
+		"vfs-write-back": "1s",
+		"dir-cache-time": "2s",
+		"poll-interval":  "3s",
+	})
+	if err != nil {
+		t.Fatalf("RcloneDurability: %v", err)
+	}
+	if got.VFSWriteBack != "1s" || got.DirCacheTime != "2s" || got.PollInterval != "3s" {
+		t.Fatalf("settings = %#v", got)
+	}
+}
+
 func TestDeregister(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

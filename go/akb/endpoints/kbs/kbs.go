@@ -28,9 +28,10 @@ const (
 // KBInfo describes a single knowledge base entry.
 type KBInfo struct {
 	config.KB
-	ResolvedMountPath string      `json:"resolved_mount_path"`
-	MountStatus       MountStatus `json:"mount_status"`
-	MountError        string      `json:"mount_error,omitempty"`
+	ResolvedMountPath string                          `json:"resolved_mount_path"`
+	MountStatus       MountStatus                     `json:"mount_status"`
+	MountError        string                          `json:"mount_error,omitempty"`
+	RcloneDurability  *mount.RcloneDurabilitySettings `json:"rclone_durability,omitempty"`
 }
 
 func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -52,8 +53,20 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 
 		status := MountStatusNotMounted
 		mountErrMsg := ""
+		var rcloneDurability *mount.RcloneDurabilitySettings
+
+		if entry.RcloneRemote != "" {
+			settings, settingsErr := mount.RcloneDurability(entry.RcloneArgs)
+			if settingsErr != nil {
+				status = MountStatusFailed
+				mountErrMsg = settingsErr.Error()
+			} else {
+				rcloneDurability = &settings
+			}
+		}
 
 		switch {
+		case status == MountStatusFailed:
 		case mgr != nil && mgr.IsMounted(entry.Mount):
 			status = MountStatusMounted
 		case entry.RcloneRemote == "":
@@ -72,6 +85,7 @@ func handler(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResour
 			ResolvedMountPath: resolved,
 			MountStatus:       status,
 			MountError:        mountErrMsg,
+			RcloneDurability:  rcloneDurability,
 		}
 	}
 
@@ -101,6 +115,7 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
   - resolved_mount_path: expanded, absolute path to use with file tools (Read, Write, Glob, Grep)
   - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
   - mount_error: present only when mount_status is "failed"
+  - rclone_durability: effective remote write-back/backsync timings for remote KBs
 
 Only "mounted" KBs are ready for use; "not_mounted" means startup is still in progress.`,
 		MIMEType: "application/json",

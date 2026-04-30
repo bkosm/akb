@@ -28,6 +28,18 @@ var DefaultRcloneArgs = map[string]string{
 	"vfs-write-back":     "5s",
 }
 
+var disallowedRcloneArgs = map[string]string{
+	"daemon": "AKB tracks rclone as a direct child process",
+}
+
+// RcloneDurabilitySettings describes effective rclone settings that affect
+// remote write visibility and cross-host backsync behavior.
+type RcloneDurabilitySettings struct {
+	VFSWriteBack string `json:"vfs_write_back"`
+	DirCacheTime string `json:"dir_cache_time"`
+	PollInterval string `json:"poll_interval"`
+}
+
 // Method determines how remote storage is mounted locally.
 type Method string
 
@@ -134,6 +146,69 @@ func (m *Manager) Preflight() error {
 // hasFuse reports whether a FUSE library was detected during Preflight.
 func (m *Manager) hasFuse() bool {
 	return m.hasFUSE
+}
+
+// EffectiveRcloneArgs returns the validated rclone args after applying
+// environment expansion and per-KB overrides on top of DefaultRcloneArgs.
+func EffectiveRcloneArgs(extraArgs map[string]string) (map[string]string, error) {
+	merged := make(map[string]string, len(DefaultRcloneArgs)+len(extraArgs))
+	for k, v := range DefaultRcloneArgs {
+		merged[k] = v
+	}
+	for k, v := range extraArgs {
+		key := os.ExpandEnv(k)
+		merged[key] = os.ExpandEnv(v)
+	}
+	for k, reason := range disallowedRcloneArgs {
+		if _, ok := merged[k]; ok {
+			return nil, fmt.Errorf("rclone arg %q is not supported: %s", k, reason)
+		}
+	}
+	if _, err := RcloneWriteBackDurationFromArgs(merged); err != nil {
+		return nil, err
+	}
+	return merged, nil
+}
+
+// RcloneWriteBackDuration returns the effective vfs-write-back duration for a
+// KB's rclone_args after applying defaults and validation.
+func RcloneWriteBackDuration(extraArgs map[string]string) (time.Duration, error) {
+	args, err := EffectiveRcloneArgs(extraArgs)
+	if err != nil {
+		return 0, err
+	}
+	return RcloneWriteBackDurationFromArgs(args)
+}
+
+// RcloneWriteBackDurationFromArgs parses vfs-write-back from already-merged
+// rclone args.
+func RcloneWriteBackDurationFromArgs(args map[string]string) (time.Duration, error) {
+	raw, ok := args["vfs-write-back"]
+	if !ok {
+		return 0, fmt.Errorf("rclone arg %q is required", "vfs-write-back")
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parse rclone arg %q=%q: %w", "vfs-write-back", raw, err)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("rclone arg %q must be non-negative", "vfs-write-back")
+	}
+	return d, nil
+}
+
+// RcloneDurability returns effective rclone settings that callers can surface
+// to agents without exposing every mount flag.
+func RcloneDurability(extraArgs map[string]string) (RcloneDurabilitySettings, error) {
+	args, err := EffectiveRcloneArgs(extraArgs)
+	if err != nil {
+		return RcloneDurabilitySettings{}, err
+	}
+	return RcloneDurabilitySettings{
+		VFSWriteBack: args["vfs-write-back"],
+		DirCacheTime: args["dir-cache-time"],
+		PollInterval: args["poll-interval"],
+	}, nil
 }
 
 // resolveMethod picks the concrete mount method from a possibly-auto value.
@@ -287,12 +362,9 @@ func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArg
 		subcmd = "nfsmount"
 	}
 
-	merged := make(map[string]string, len(DefaultRcloneArgs)+len(extraArgs))
-	for k, v := range DefaultRcloneArgs {
-		merged[k] = v
-	}
-	for k, v := range extraArgs {
-		merged[os.ExpandEnv(k)] = os.ExpandEnv(v)
+	merged, err := EffectiveRcloneArgs(extraArgs)
+	if err != nil {
+		return nil, err
 	}
 
 	args := []string{subcmd, remote, mountpoint}
