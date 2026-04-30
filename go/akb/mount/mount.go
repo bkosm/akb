@@ -3,6 +3,7 @@ package mount
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -26,6 +27,14 @@ var DefaultRcloneArgs = map[string]string{
 	"dir-cache-time":     "30s",
 	"poll-interval":      "15s",
 	"vfs-write-back":     "5s",
+}
+
+// DarwinRcloneArgs suppress macOS metadata artifacts where the active rclone
+// mount backend supports these flags. Cleanup still handles drivers that leak
+// AppleDouble files despite the flags.
+var DarwinRcloneArgs = map[string]string{
+	"noappledouble": "",
+	"noapplexattr":  "",
 }
 
 var disallowedRcloneArgs = map[string]string{
@@ -172,10 +181,7 @@ func (m *Manager) hasFuse() bool {
 // EffectiveRcloneArgs returns the validated rclone args after applying
 // environment expansion and per-KB overrides on top of DefaultRcloneArgs.
 func EffectiveRcloneArgs(extraArgs map[string]string) (map[string]string, error) {
-	merged := make(map[string]string, len(DefaultRcloneArgs)+len(extraArgs))
-	for k, v := range DefaultRcloneArgs {
-		merged[k] = v
-	}
+	merged := defaultRcloneArgs()
 	for k, v := range extraArgs {
 		key := os.ExpandEnv(k)
 		merged[key] = os.ExpandEnv(v)
@@ -189,6 +195,19 @@ func EffectiveRcloneArgs(extraArgs map[string]string) (map[string]string, error)
 		return nil, err
 	}
 	return merged, nil
+}
+
+func defaultRcloneArgs() map[string]string {
+	merged := make(map[string]string, len(DefaultRcloneArgs)+len(DarwinRcloneArgs))
+	for k, v := range DefaultRcloneArgs {
+		merged[k] = v
+	}
+	if runtime.GOOS == "darwin" {
+		for k, v := range DarwinRcloneArgs {
+			merged[k] = v
+		}
+	}
+	return merged
 }
 
 // RcloneWriteBackDuration returns the effective vfs-write-back duration for a
@@ -470,7 +489,11 @@ func (m *Manager) doUnmount(e *entry) error {
 
 	var waitErr error
 	if e.remote != "" && e.cmd != nil && m.checkMount(mp) {
-		_, waitErr = m.waitForWriteBack(e)
+		if err := CleanMetadataArtifacts(mp); err != nil {
+			waitErr = err
+		} else {
+			_, waitErr = m.waitForWriteBack(e)
+		}
 	}
 	m.markExitExpected(e)
 
@@ -537,6 +560,9 @@ func (m *Manager) Sync(mountpoint string) (SyncResult, error) {
 		return SyncResult{}, fmt.Errorf("mountpoint %q is not mounted", mountpoint)
 	}
 
+	if err := CleanMetadataArtifacts(mountpoint); err != nil {
+		return SyncResult{}, err
+	}
 	waited, err := m.waitForWriteBack(e)
 	if err != nil {
 		return SyncResult{}, err
@@ -603,6 +629,31 @@ func rcloneExitedDuringWriteBackError(exitErr error) error {
 		return fmt.Errorf("rclone exited before write-back grace completed: %w", exitErr)
 	}
 	return fmt.Errorf("rclone exited before write-back grace completed")
+}
+
+// CleanMetadataArtifacts removes disposable macOS metadata files that can be
+// created by writing through FUSE mounts.
+func CleanMetadataArtifacts(root string) error {
+	root = filepath.Clean(os.ExpandEnv(root))
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root || !isMetadataArtifact(d.Name()) {
+			return nil
+		}
+		if err := os.RemoveAll(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if d.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+}
+
+func isMetadataArtifact(name string) bool {
+	return name == ".DS_Store" || strings.HasPrefix(name, "._")
 }
 
 func (m *Manager) markExitExpected(e *entry) {

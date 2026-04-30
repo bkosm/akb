@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -370,6 +371,22 @@ func TestRcloneDurability(t *testing.T) {
 	}
 }
 
+func TestDefaultRcloneArgs_DarwinMetadataFlags(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific rclone args")
+	}
+	args, err := EffectiveRcloneArgs(nil)
+	if err != nil {
+		t.Fatalf("EffectiveRcloneArgs: %v", err)
+	}
+	if _, ok := args["noappledouble"]; !ok {
+		t.Fatal("expected noappledouble on darwin")
+	}
+	if _, ok := args["noapplexattr"]; !ok {
+		t.Fatal("expected noapplexattr on darwin")
+	}
+}
+
 func TestDeregister(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -656,6 +673,44 @@ func TestSync_NotRegistered(t *testing.T) {
 	mgr := NewManager()
 	if _, err := mgr.Sync(t.TempDir()); err == nil {
 		t.Fatal("expected sync error for unregistered mountpoint")
+	}
+}
+
+func TestCleanMetadataArtifacts(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(root, ".DS_Store"),
+		filepath.Join(root, "._note.md"),
+		filepath.Join(root, "nested", ".DS_Store"),
+		filepath.Join(root, "nested", "._other.md"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("metadata"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keep := filepath.Join(root, "nested", "keep.md")
+	if err := os.WriteFile(keep, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CleanMetadataArtifacts(root); err != nil {
+		t.Fatalf("CleanMetadataArtifacts: %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(root, ".DS_Store"),
+		filepath.Join(root, "._note.md"),
+		filepath.Join(root, "nested", ".DS_Store"),
+		filepath.Join(root, "nested", "._other.md"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("metadata artifact %s still exists, err=%v", path, err)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("expected non-metadata file to remain: %v", err)
 	}
 }
 
