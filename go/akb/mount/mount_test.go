@@ -572,6 +572,63 @@ func TestWatchRclone_ExpectedExitDoesNotRecordMountError(t *testing.T) {
 	}
 }
 
+func TestWaitForWriteBack_WaitsForDuration(t *testing.T) {
+	mgr := NewManager()
+	cmd := exec.Command("sh", "-c", "sleep 1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+
+	oldBuffer := writeBackGraceBuffer
+	writeBackGraceBuffer = 0
+	defer func() { writeBackGraceBuffer = oldBuffer }()
+
+	e := &entry{
+		remote:     ":memory:",
+		mountpoint: t.TempDir(),
+		cmd:        cmd,
+		rcloneArgs: map[string]string{"vfs-write-back": "5ms"},
+		waitDone:   make(chan struct{}),
+	}
+
+	start := time.Now()
+	if err := mgr.waitForWriteBack(e); err != nil {
+		t.Fatalf("waitForWriteBack: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 5*time.Millisecond {
+		t.Fatalf("waitForWriteBack returned too early after %v", elapsed)
+	}
+}
+
+func TestWaitForWriteBack_FailsIfRcloneExits(t *testing.T) {
+	mgr := NewManager()
+	cmd := exec.Command("sh", "-c", "exit 1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	oldBuffer := writeBackGraceBuffer
+	writeBackGraceBuffer = 0
+	defer func() { writeBackGraceBuffer = oldBuffer }()
+
+	e := &entry{
+		remote:     ":memory:",
+		mountpoint: t.TempDir(),
+		cmd:        cmd,
+		rcloneArgs: map[string]string{"vfs-write-back": "1h"},
+		waitDone:   make(chan struct{}),
+	}
+	mgr.watchRclone(e)
+
+	if err := mgr.waitForWriteBack(e); err == nil {
+		t.Fatal("expected exited rclone to fail write-back wait")
+	}
+}
+
 // writeFakeRclone creates a temporary directory containing a shell script
 // named "rclone" that runs the given script body, prepends the dir to PATH,
 // and returns the directory path.

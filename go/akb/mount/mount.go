@@ -32,6 +32,8 @@ var disallowedRcloneArgs = map[string]string{
 	"daemon": "AKB tracks rclone as a direct child process",
 }
 
+var writeBackGraceBuffer = time.Second
+
 // RcloneDurabilitySettings describes effective rclone settings that affect
 // remote write visibility and cross-host backsync behavior.
 type RcloneDurabilitySettings struct {
@@ -54,6 +56,7 @@ type entry struct {
 	mountpoint   string
 	method       Method    // resolved method (never MethodAuto)
 	cmd          *exec.Cmd // rclone child process (nil for local dirs)
+	rcloneArgs   map[string]string
 	exitExpected bool
 	exited       bool
 	exitErr      error
@@ -262,7 +265,7 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 	}
 	m.mu.Unlock()
 
-	e := &entry{remote: remote, mountpoint: mountpoint}
+	e := &entry{remote: remote, mountpoint: mountpoint, rcloneArgs: extraArgs}
 
 	if remote == "" {
 		fi, err := os.Stat(mountpoint)
@@ -451,6 +454,10 @@ func (m *Manager) doUnmount(e *entry) error {
 		mp = resolved
 	}
 
+	var waitErr error
+	if e.remote != "" && e.cmd != nil && m.checkMount(mp) {
+		waitErr = m.waitForWriteBack(e)
+	}
 	m.markExitExpected(e)
 
 	var umountErr error
@@ -477,7 +484,61 @@ func (m *Manager) doUnmount(e *entry) error {
 		_ = e.cmd.Process.Signal(syscall.SIGTERM)
 	}
 
+	if waitErr != nil && umountErr != nil {
+		return fmt.Errorf("%v; %w", waitErr, umountErr)
+	}
+	if waitErr != nil {
+		return waitErr
+	}
 	return umountErr
+}
+
+func (m *Manager) waitForWriteBack(e *entry) error {
+	if e == nil || e.remote == "" || e.cmd == nil {
+		return nil
+	}
+	writeBack, err := RcloneWriteBackDuration(e.rcloneArgs)
+	if err != nil {
+		return err
+	}
+	wait := writeBack + writeBackGraceBuffer
+	if wait <= 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	exited := e.exited
+	exitErr := e.exitErr
+	waitDone := e.waitDone
+	m.mu.Unlock()
+	if exited {
+		return rcloneExitedDuringWriteBackError(exitErr)
+	}
+	if waitDone == nil {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		<-timer.C
+		return nil
+	}
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-waitDone:
+		m.mu.Lock()
+		exitErr = e.exitErr
+		m.mu.Unlock()
+		return rcloneExitedDuringWriteBackError(exitErr)
+	}
+}
+
+func rcloneExitedDuringWriteBackError(exitErr error) error {
+	if exitErr != nil {
+		return fmt.Errorf("rclone exited before write-back grace completed: %w", exitErr)
+	}
+	return fmt.Errorf("rclone exited before write-back grace completed")
 }
 
 func (m *Manager) markExitExpected(e *entry) {
