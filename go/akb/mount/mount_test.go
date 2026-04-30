@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -512,6 +513,62 @@ func TestSetMountError(t *testing.T) {
 	mgr.SetMountError(dir, nil)
 	if err := mgr.MountError(dir); err != nil {
 		t.Fatalf("expected nil after clearing, got %v", err)
+	}
+}
+
+func TestWatchRclone_UnexpectedExitRecordsMountError(t *testing.T) {
+	mgr := NewManager()
+	dir := t.TempDir()
+	cmd := exec.Command("sh", "-c", "exit 7")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	e := &entry{
+		remote:     ":memory:",
+		mountpoint: dir,
+		cmd:        cmd,
+		waitDone:   make(chan struct{}),
+	}
+	mgr.mu.Lock()
+	mgr.entries[dir] = e
+	mgr.mu.Unlock()
+
+	mgr.watchRclone(e)
+	<-e.waitDone
+
+	if err := mgr.MountError(dir); err == nil {
+		t.Fatal("expected unexpected process exit to be recorded")
+	}
+	if mgr.IsMounted(dir) {
+		t.Fatal("exited rclone process should not report mounted")
+	}
+}
+
+func TestWatchRclone_ExpectedExitDoesNotRecordMountError(t *testing.T) {
+	mgr := NewManager()
+	dir := t.TempDir()
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	e := &entry{
+		remote:       ":memory:",
+		mountpoint:   dir,
+		cmd:          cmd,
+		exitExpected: true,
+		waitDone:     make(chan struct{}),
+	}
+	mgr.mu.Lock()
+	mgr.entries[dir] = e
+	mgr.mu.Unlock()
+
+	mgr.watchRclone(e)
+	<-e.waitDone
+
+	if err := mgr.MountError(dir); err != nil {
+		t.Fatalf("expected intentional process exit to be ignored, got %v", err)
 	}
 }
 

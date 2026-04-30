@@ -50,10 +50,14 @@ const (
 )
 
 type entry struct {
-	remote     string // empty for plain local directories
-	mountpoint string
-	method     Method    // resolved method (never MethodAuto)
-	cmd        *exec.Cmd // rclone child process (nil for local dirs)
+	remote       string // empty for plain local directories
+	mountpoint   string
+	method       Method    // resolved method (never MethodAuto)
+	cmd          *exec.Cmd // rclone child process (nil for local dirs)
+	exitExpected bool
+	exited       bool
+	exitErr      error
+	waitDone     chan struct{}
 }
 
 // Manager tracks rclone mounts and plain local directories.
@@ -299,6 +303,8 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 			return err
 		}
 		e.cmd = cmd
+		e.waitDone = make(chan struct{})
+		m.watchRclone(e)
 
 		waitCtx, waitCancel := context.WithTimeout(ctx, mountCheckTimeout())
 		defer waitCancel()
@@ -388,10 +394,34 @@ func (m *Manager) rcloneMount(remote, mountpoint string, method Method, extraArg
 		return nil, fmt.Errorf("rclone %s %q at %q: %w", subcmd, remote, mountpoint, err)
 	}
 
-	// Reap the child in the background so it doesn't become a zombie.
-	go func() { _ = cmd.Wait() }()
-
 	return cmd, nil
+}
+
+func (m *Manager) watchRclone(e *entry) {
+	go func() {
+		err := e.cmd.Wait()
+		m.recordRcloneExit(e, err)
+	}()
+}
+
+func (m *Manager) recordRcloneExit(e *entry, waitErr error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	e.exited = true
+	e.exitErr = waitErr
+	if e.waitDone != nil {
+		close(e.waitDone)
+	}
+	if e.exitExpected {
+		return
+	}
+
+	err := fmt.Errorf("rclone process exited unexpectedly")
+	if waitErr != nil {
+		err = fmt.Errorf("rclone process exited unexpectedly: %w", waitErr)
+	}
+	m.mountErrs[e.mountpoint] = err
 }
 
 // Unmount stops the rclone mount at the given mountpoint.
@@ -421,6 +451,8 @@ func (m *Manager) doUnmount(e *entry) error {
 		mp = resolved
 	}
 
+	m.markExitExpected(e)
+
 	var umountErr error
 
 	switch {
@@ -448,6 +480,15 @@ func (m *Manager) doUnmount(e *entry) error {
 	return umountErr
 }
 
+func (m *Manager) markExitExpected(e *entry) {
+	if e == nil {
+		return
+	}
+	m.mu.Lock()
+	e.exitExpected = true
+	m.mu.Unlock()
+}
+
 // IsMounted returns true if the mountpoint has an active mount.
 // Returns false for plain local directories.
 func (m *Manager) IsMounted(mountpoint string) bool {
@@ -455,11 +496,20 @@ func (m *Manager) IsMounted(mountpoint string) bool {
 
 	m.mu.Lock()
 	e, ok := m.entries[mountpoint]
+	remote := ""
+	exited := false
+	if ok {
+		remote = e.remote
+		exited = e.exited
+	}
 	m.mu.Unlock()
 	if !ok {
 		return false
 	}
-	if e.remote == "" {
+	if remote == "" {
+		return false
+	}
+	if exited {
 		return false
 	}
 
