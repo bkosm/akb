@@ -34,12 +34,26 @@ var disallowedRcloneArgs = map[string]string{
 
 var writeBackGraceBuffer = time.Second
 
+const (
+	// SyncAssuranceLocalNoop means no remote sync was needed for a local KB.
+	SyncAssuranceLocalNoop = "local_noop"
+	// SyncAssuranceWriteBackElapsedMountHealthy means the write-back window
+	// elapsed and the tracked mount process remained alive.
+	SyncAssuranceWriteBackElapsedMountHealthy = "write_back_elapsed_mount_healthy"
+)
+
 // RcloneDurabilitySettings describes effective rclone settings that affect
 // remote write visibility and cross-host backsync behavior.
 type RcloneDurabilitySettings struct {
 	VFSWriteBack string `json:"vfs_write_back"`
 	DirCacheTime string `json:"dir_cache_time"`
 	PollInterval string `json:"poll_interval"`
+}
+
+// SyncResult describes the assurance AKB can provide after a mount sync wait.
+type SyncResult struct {
+	Assurance string
+	Waited    time.Duration
 }
 
 // Method determines how remote storage is mounted locally.
@@ -456,7 +470,7 @@ func (m *Manager) doUnmount(e *entry) error {
 
 	var waitErr error
 	if e.remote != "" && e.cmd != nil && m.checkMount(mp) {
-		waitErr = m.waitForWriteBack(e)
+		_, waitErr = m.waitForWriteBack(e)
 	}
 	m.markExitExpected(e)
 
@@ -493,17 +507,60 @@ func (m *Manager) doUnmount(e *entry) error {
 	return umountErr
 }
 
-func (m *Manager) waitForWriteBack(e *entry) error {
+// Sync waits for the configured rclone write-back window on a mounted remote KB.
+// It does not prove remote object durability; it only verifies that the
+// write-back window elapsed while the tracked mount process stayed alive.
+func (m *Manager) Sync(mountpoint string) (SyncResult, error) {
+	mountpoint = filepath.Clean(os.ExpandEnv(mountpoint))
+
+	m.mu.Lock()
+	e, ok := m.entries[mountpoint]
+	remote := ""
+	exited := false
+	exitErr := error(nil)
+	if ok {
+		remote = e.remote
+		exited = e.exited
+		exitErr = e.exitErr
+	}
+	m.mu.Unlock()
+	if !ok {
+		return SyncResult{}, fmt.Errorf("mountpoint %q not registered", mountpoint)
+	}
+	if remote == "" {
+		return SyncResult{Assurance: SyncAssuranceLocalNoop}, nil
+	}
+	if exited {
+		return SyncResult{}, rcloneExitedDuringWriteBackError(exitErr)
+	}
+	if !m.checkMount(mountpoint) {
+		return SyncResult{}, fmt.Errorf("mountpoint %q is not mounted", mountpoint)
+	}
+
+	waited, err := m.waitForWriteBack(e)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if !m.IsMounted(mountpoint) {
+		return SyncResult{}, fmt.Errorf("mountpoint %q is not mounted after sync wait", mountpoint)
+	}
+	return SyncResult{
+		Assurance: SyncAssuranceWriteBackElapsedMountHealthy,
+		Waited:    waited,
+	}, nil
+}
+
+func (m *Manager) waitForWriteBack(e *entry) (time.Duration, error) {
 	if e == nil || e.remote == "" || e.cmd == nil {
-		return nil
+		return 0, nil
 	}
 	writeBack, err := RcloneWriteBackDuration(e.rcloneArgs)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	wait := writeBack + writeBackGraceBuffer
 	if wait <= 0 {
-		return nil
+		return 0, nil
 	}
 
 	m.mu.Lock()
@@ -512,25 +569,32 @@ func (m *Manager) waitForWriteBack(e *entry) error {
 	waitDone := e.waitDone
 	m.mu.Unlock()
 	if exited {
-		return rcloneExitedDuringWriteBackError(exitErr)
+		return 0, rcloneExitedDuringWriteBackError(exitErr)
 	}
 	if waitDone == nil {
 		timer := time.NewTimer(wait)
 		defer timer.Stop()
 		<-timer.C
-		return nil
+		return wait, nil
 	}
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-		return nil
+		m.mu.Lock()
+		exited = e.exited
+		exitErr = e.exitErr
+		m.mu.Unlock()
+		if exited {
+			return 0, rcloneExitedDuringWriteBackError(exitErr)
+		}
+		return wait, nil
 	case <-waitDone:
 		m.mu.Lock()
 		exitErr = e.exitErr
 		m.mu.Unlock()
-		return rcloneExitedDuringWriteBackError(exitErr)
+		return 0, rcloneExitedDuringWriteBackError(exitErr)
 	}
 }
 

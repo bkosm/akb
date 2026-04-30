@@ -596,8 +596,12 @@ func TestWaitForWriteBack_WaitsForDuration(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := mgr.waitForWriteBack(e); err != nil {
+	waited, err := mgr.waitForWriteBack(e)
+	if err != nil {
 		t.Fatalf("waitForWriteBack: %v", err)
+	}
+	if waited != 5*time.Millisecond {
+		t.Fatalf("waited = %v, want 5ms", waited)
 	}
 	if elapsed := time.Since(start); elapsed < 5*time.Millisecond {
 		t.Fatalf("waitForWriteBack returned too early after %v", elapsed)
@@ -624,8 +628,34 @@ func TestWaitForWriteBack_FailsIfRcloneExits(t *testing.T) {
 	}
 	mgr.watchRclone(e)
 
-	if err := mgr.waitForWriteBack(e); err == nil {
+	if _, err := mgr.waitForWriteBack(e); err == nil {
 		t.Fatal("expected exited rclone to fail write-back wait")
+	}
+}
+
+func TestSync_LocalNoop(t *testing.T) {
+	mgr := NewManager()
+	dir := t.TempDir()
+	if err := mgr.Add(context.Background(), "test", "", dir, MethodAuto, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := mgr.Sync(dir)
+	if err != nil {
+		t.Fatalf("Sync local: %v", err)
+	}
+	if result.Assurance != SyncAssuranceLocalNoop {
+		t.Fatalf("Assurance = %q, want %q", result.Assurance, SyncAssuranceLocalNoop)
+	}
+	if result.Waited != 0 {
+		t.Fatalf("Waited = %v, want 0", result.Waited)
+	}
+}
+
+func TestSync_NotRegistered(t *testing.T) {
+	mgr := NewManager()
+	if _, err := mgr.Sync(t.TempDir()); err == nil {
+		t.Fatal("expected sync error for unregistered mountpoint")
 	}
 }
 

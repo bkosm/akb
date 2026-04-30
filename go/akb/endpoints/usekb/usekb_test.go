@@ -60,6 +60,31 @@ func TestHandle_LocalKB_UnmountNoop(t *testing.T) {
 	}
 }
 
+func TestHandle_LocalKB_SyncNoop(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"local-kb": {Mount: dir},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "sync"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.Status, "no sync action needed") {
+		t.Fatalf("status = %q, want sync noop message", out.Status)
+	}
+	if out.Assurance != mount.SyncAssuranceLocalNoop {
+		t.Fatalf("assurance = %q, want %q", out.Assurance, mount.SyncAssuranceLocalNoop)
+	}
+	if out.Waited != "0s" {
+		t.Fatalf("waited = %q, want 0s", out.Waited)
+	}
+}
+
 func TestHandle_RemoteKB_MountPreflightFails(t *testing.T) {
 	t.Setenv("PATH", "")
 	dir := t.TempDir()
@@ -106,6 +131,39 @@ func TestHandle_RemoteKB_MountSuccess(t *testing.T) {
 	}
 	if !strings.Contains(out.Status, "mounted") {
 		t.Fatalf("status = %q, want mounted message", out.Status)
+	}
+}
+
+func TestHandle_RemoteKB_SyncSuccess(t *testing.T) {
+	dir := t.TempDir()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"remote-kb": {
+				Mount:        dir,
+				RcloneRemote: ":memory:",
+				RcloneArgs:   map[string]string{"vfs-write-back": "0s"},
+			},
+		},
+	}}
+
+	mgr := mount.NewManager()
+	t.Cleanup(func() { _ = mgr.Unmount(dir) })
+
+	ctx := config.IntoContext(context.Background(), sc)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	if _, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "mount"}); err != nil {
+		t.Fatal(err)
+	}
+	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "sync"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Assurance != mount.SyncAssuranceWriteBackElapsedMountHealthy {
+		t.Fatalf("assurance = %q, want %q", out.Assurance, mount.SyncAssuranceWriteBackElapsedMountHealthy)
+	}
+	if out.Waited == "" {
+		t.Fatal("waited should be set")
 	}
 }
 

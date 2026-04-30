@@ -14,14 +14,16 @@ import (
 
 // Input holds the parameters for the use_kb tool.
 type Input struct {
-	Name   string `json:"name" jsonschema:"name of the knowledge base to mount or unmount"`
-	Action string `json:"action" jsonschema:"'mount' to activate the KB, 'unmount' to deactivate it"`
+	Name   string `json:"name" jsonschema:"name of the knowledge base to mount, unmount, or sync"`
+	Action string `json:"action" jsonschema:"'mount' to activate the KB, 'unmount' to deactivate it, or 'sync' to wait for remote write-back"`
 }
 
 // Output is the response payload for the use_kb tool.
 type Output struct {
-	Mount  string `json:"mount" jsonschema:"resolved local path"`
-	Status string `json:"status" jsonschema:"result of the action"`
+	Mount     string `json:"mount" jsonschema:"resolved local path"`
+	Status    string `json:"status" jsonschema:"result of the action"`
+	Assurance string `json:"assurance,omitempty" jsonschema:"sync assurance level, present for sync actions"`
+	Waited    string `json:"waited,omitempty" jsonschema:"duration waited for write-back, present for sync actions"`
 }
 
 // Handle implements the use_kb tool handler.
@@ -29,8 +31,8 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 	if input.Name == "" {
 		return nil, Output{}, fmt.Errorf("name is required")
 	}
-	if input.Action != "mount" && input.Action != "unmount" {
-		return nil, Output{}, fmt.Errorf("action must be 'mount' or 'unmount'")
+	if input.Action != "mount" && input.Action != "unmount" && input.Action != "sync" {
+		return nil, Output{}, fmt.Errorf("action must be 'mount', 'unmount', or 'sync'")
 	}
 
 	configurer, err := config.FromContext(ctx)
@@ -51,6 +53,14 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 	resolved := filepath.Clean(os.ExpandEnv(kbEntry.Mount))
 
 	if kbEntry.RcloneRemote == "" {
+		if input.Action == "sync" {
+			return nil, Output{
+				Mount:     resolved,
+				Status:    fmt.Sprintf("local KB %q — no sync action needed", input.Name),
+				Assurance: mount.SyncAssuranceLocalNoop,
+				Waited:    "0s",
+			}, nil
+		}
 		return nil, Output{
 			Mount:  resolved,
 			Status: fmt.Sprintf("local KB %q — no mount action needed", input.Name),
@@ -92,6 +102,18 @@ func Handle(ctx context.Context, req *mcp.CallToolRequest, input Input) (*mcp.Ca
 			Mount:  resolved,
 			Status: fmt.Sprintf("KB %q unmounted from %s", input.Name, resolved),
 		}, nil
+
+	case "sync":
+		result, err := mgr.Sync(kbEntry.Mount)
+		if err != nil {
+			return nil, Output{}, fmt.Errorf("sync: %w", err)
+		}
+		return nil, Output{
+			Mount:     resolved,
+			Status:    fmt.Sprintf("KB %q sync completed at %s", input.Name, resolved),
+			Assurance: result.Assurance,
+			Waited:    result.Waited.String(),
+		}, nil
 	}
 
 	return nil, Output{}, fmt.Errorf("unexpected action %q", input.Action)
@@ -106,8 +128,9 @@ Use cases:
 Actions:
   - "mount": activate a remote KB (starts rclone, makes files accessible at mount path)
   - "unmount": deactivate a remote KB (stops rclone, releases mountpoint)
+  - "sync": after writing to a remote KB, wait for rclone's configured write-back window and verify the mount process remains healthy
 
-Local KBs (no rclone_remote) are always accessible — both actions are no-ops.`
+Local KBs (no rclone_remote) are always accessible — all actions are no-ops.`
 
 // Register adds the use_kb tool to the MCP server.
 var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) error {
