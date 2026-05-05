@@ -49,7 +49,7 @@ make vet
 
 Agents interact with KBs using standard file tools on local mount paths.
 
-1. Read the `akb://kbs` resource to discover available KBs, their config fields, resolved mount paths, and mount status.
+1. Read the `akb://kbs` resource to discover available KBs, their config fields, resolved mount paths, and this MCP server's local mount status.
 2. Use standard file tools only on KBs whose `mount_status` is `"mounted"`:
    - Read files: Read tool
    - Write files: Write tool
@@ -59,6 +59,8 @@ Agents interact with KBs using standard file tools on local mount paths.
 4. Call `new_kb` to create a new knowledge base.
 
 **Mount path convention:** for project-scoped KBs, mount at `.akb/<name>` under the repository root and ensure `.akb` is in the repo's `.gitignore`. For global KBs, use `$HOME/.akb/mounts/<name>`.
+
+Do not start multiple AKB server processes with the same remote KB configured to the same local mount path. Sharing remote storage is fine for disciplined write patterns, but concurrent local AKB processes should use unique mount paths; AKB does not have a cross-process mount owner registry.
 
 KBs can be backed by remote storage (mounted via rclone FUSE/NFS) or plain local directories. `use_kb sync` is timer and mount-health based; it is not a confirmed S3/object-store commit. Remote changes from other hosts may take roughly `poll-interval` / `dir-cache-time` to appear locally. Shared-file writes are last-writer-wins, so use unique append-only files for multi-agent records.
 

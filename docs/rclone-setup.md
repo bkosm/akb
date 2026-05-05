@@ -87,6 +87,41 @@ The `auto` mount method (the default when `mount_method` is omitted) handles
 this transparently: it checks for FUSE availability and falls back to NFS if
 FUSE is not installed.
 
+## Multiple AKB processes
+
+Each AKB server process tracks only the rclone mounts that it starts itself.
+`akb://kbs` reports this local process view; it is not a global owner registry
+for every mount on the host.
+
+Do not run two AKB processes with the same remote KB configured to the same
+local mountpoint. Sharing the same remote storage can work with the remote-write
+caveats below, but concurrent AKB processes should use different local
+mountpoints.
+
+When a remote KB starts, AKB checks whether the configured local mountpoint is
+already mounted. If that mountpoint is already mounted but is not registered in
+the current AKB process, AKB treats it as a conflict and refuses to unmount it
+automatically. The MCP server keeps running, but that KB appears in `akb://kbs`
+with `mount_status: "failed"` and a `mount_error` describing the conflict.
+
+AKB does not currently borrow existing mounts from another process. A borrowed
+process could use the files, but it could not track the owner process's rclone
+child, provide the same `use_kb sync` assurance, or safely unmount the owner
+process's mount.
+
+AKB notices mount problems only through local symptoms:
+
+- its tracked rclone child exits unexpectedly
+- `akb://kbs` checks the OS mount table and sees the path is not mounted
+- `use_kb sync` checks the mount and returns an error
+- file tools fail or see the underlying unmounted directory
+
+There is no automatic retry or remount loop after startup. To recover from a
+mountpoint conflict, stop the other owner process, change one AKB process to use
+a unique local mountpoint, then call `use_kb` with `action: "mount"` or restart
+the MCP server. If a mount was disrupted while writes were buffered, those
+writes may not have received AKB's write-back wait.
+
 ## macOS metadata files
 
 macOS and some FUSE drivers may create AppleDouble sidecar files (`._*`) and

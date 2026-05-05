@@ -96,6 +96,52 @@ Each KB entry in the config has these fields:
 
 All KB config fields (`mount`, `rclone_remote`, `rclone_args`) support `$ENV_VAR` expansion at runtime. When using a remote config backend (S3), always use env var prefixes (e.g. `$HOME`) instead of bare absolute paths so configs stay portable across developers and machines. Local config backends can use absolute paths.
 
+### Concurrent AKB processes
+
+Do not run two AKB processes with the same remote KB configured to the same
+local mountpoint. AKB owns only the mounts it starts in its own process. If a
+remote mountpoint is already mounted but is not registered in the current AKB
+process, AKB refuses to take it over and reports the KB as failed rather than
+unmounting another process's mount.
+
+Sharing the same remote storage is fine for disciplined write patterns, but use
+different local mountpoints per concurrent AKB process.
+
+Safe: same remote storage, different local mountpoints.
+
+```json
+[
+  {
+    "rclone_remote": ":s3,env_auth=true,region=eu-west-1:my-bucket/shared-kb/",
+    "mount": "$HOME/project-a/.akb/shared-kb"
+  },
+  {
+    "rclone_remote": ":s3,env_auth=true,region=eu-west-1:my-bucket/shared-kb/",
+    "mount": "$HOME/project-b/.akb/shared-kb"
+  }
+]
+```
+
+Unsafe: same remote storage and same local mountpoint.
+
+```json
+[
+  {
+    "rclone_remote": ":s3,env_auth=true,region=eu-west-1:my-bucket/shared-kb/",
+    "mount": "$HOME/.akb/mounts/shared-kb"
+  },
+  {
+    "rclone_remote": ":s3,env_auth=true,region=eu-west-1:my-bucket/shared-kb/",
+    "mount": "$HOME/.akb/mounts/shared-kb"
+  }
+]
+```
+
+There is no automatic remount retry loop. If a KB fails because the local
+mountpoint is already mounted elsewhere, stop the other owner process, choose a
+unique mount path, then call `use_kb` with `action: "mount"` or restart the MCP
+server.
+
 ### Default rclone args
 
 These are applied to every mount unless overridden via `rclone_args`:
@@ -174,7 +220,7 @@ KBs are mounted in a background goroutine that runs **concurrently** with the MC
 
 ### Agent discovery
 
-Agents should read `akb://kbs` as the single discovery resource. It includes each KB's config fields, `resolved_mount_path`, live `mount_status`, optional `mount_error`, and remote `rclone_durability` timings.
+Agents should read `akb://kbs` as the single discovery resource. It includes each KB's config fields, `resolved_mount_path`, this server's live `mount_status`, optional `mount_error`, and remote `rclone_durability` timings.
 
 Only use standard file tools on KBs whose `mount_status` is `"mounted"`.
 
