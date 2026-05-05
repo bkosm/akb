@@ -122,6 +122,25 @@ a unique local mountpoint, then call `use_kb` with `action: "mount"` or restart
 the MCP server. If a mount was disrupted while writes were buffered, those
 writes may not have received AKB's write-back wait.
 
+### NFS silly-rename files
+
+When using `rclone nfsmount`, files whose names start with `.nfs` can appear in
+the mount directory. These are NFS "silly rename" placeholders, not Finder
+metadata files or AKB-created KB content. NFS creates them when a file is
+deleted while a process still has it open, so the process can keep using the
+file until it closes the handle.
+
+These files usually disappear after the owning process closes the file. If they
+persist, look for an open handle or stale NFS client/server state rather than
+treating them like `.DS_Store` or `._*` cleanup artifacts. For example,
+`lsof <mount-dir>/.nfs...` can inspect a specific file; `lsof +D <mount-dir>`
+can scan the whole mount, but may be slow on large KBs.
+
+AKB does not automatically sweep `.nfs*` files. Deleting them can race active
+processes, fail while the file is busy, or remove the evidence needed to debug
+which process is holding the file open. Avoid intentionally naming KB files
+with a `.nfs` prefix on NFS mounts.
+
 ## macOS metadata files
 
 macOS and some FUSE drivers may create AppleDouble sidecar files (`._*`) and
