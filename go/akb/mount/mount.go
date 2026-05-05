@@ -425,10 +425,8 @@ func (m *Manager) Add(ctx context.Context, name, remote, mountpoint string, meth
 		if err := os.MkdirAll(mountpoint, 0o755); err != nil {
 			return fmt.Errorf("create mountpoint %q: %w", mountpoint, err)
 		}
-		if m.checkMount(mountpoint) {
-			if err := m.doUnmount(&entry{mountpoint: mountpoint, method: resolved}); err != nil {
-				return fmt.Errorf("unmount stale mount at %q: %w", mountpoint, err)
-			}
+		if info, ok := lookupOSMountInfoFn(mountpoint); ok {
+			return existingMountConflictError(mountpoint, info)
 		} else {
 			entries, err := os.ReadDir(mountpoint)
 			if err != nil {
@@ -742,6 +740,18 @@ func rcloneExitedDuringWriteBackError(exitErr error) error {
 	return fmt.Errorf("rclone exited before write-back grace completed")
 }
 
+func existingMountConflictError(mountpoint string, info osMountInfo) error {
+	details := ""
+	if info.source != "" || info.fsType != "" {
+		details = fmt.Sprintf(" (source: %q, type: %q)", info.source, info.fsType)
+	}
+	return fmt.Errorf(
+		"mountpoint %q is already mounted outside this AKB process%s; refusing to unmount it automatically",
+		mountpoint,
+		details,
+	)
+}
+
 // CleanMetadataArtifacts removes disposable macOS metadata files that can be
 // created by writing through FUSE mounts.
 func CleanMetadataArtifacts(root string) error {
@@ -804,9 +814,11 @@ func (m *Manager) IsMounted(mountpoint string) bool {
 }
 
 func (m *Manager) checkMount(mountpoint string) bool {
-	_, ok := lookupOSMountInfo(mountpoint)
+	_, ok := lookupOSMountInfoFn(mountpoint)
 	return ok
 }
+
+var lookupOSMountInfoFn = lookupOSMountInfo
 
 func lookupOSMountInfo(mountpoint string) (osMountInfo, bool) {
 	// Resolve symlinks so /tmp matches /private/tmp on macOS.

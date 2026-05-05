@@ -580,6 +580,80 @@ func TestAdd_Remote_NonEmptyMountpoint(t *testing.T) {
 	}
 }
 
+func TestAdd_Remote_ExistingUntrackedMountpointFailsSafe(t *testing.T) {
+	dir := t.TempDir()
+	oldLookup := lookupOSMountInfoFn
+	lookupOSMountInfoFn = func(mountpoint string) (osMountInfo, bool) {
+		if filepath.Clean(mountpoint) == filepath.Clean(dir) {
+			return osMountInfo{source: "rclone", fsType: "fuse-t"}, true
+		}
+		return oldLookup(mountpoint)
+	}
+	defer func() { lookupOSMountInfoFn = oldLookup }()
+
+	mgr := &Manager{
+		entries:         make(map[string]*entry),
+		stops:           make(map[string]func()),
+		mountErrs:       make(map[string]error),
+		hasFUSE:         true,
+		preflightCalled: true,
+	}
+
+	err := mgr.Add(context.Background(), "test", ":s3,env_auth=true:bucket/", dir, MethodFuse, nil)
+	if err == nil {
+		t.Fatal("expected existing mountpoint conflict")
+	}
+	for _, want := range []string{
+		"already mounted outside this AKB process",
+		"refusing to unmount it automatically",
+		"rclone",
+		"fuse-t",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error should contain %q, got: %v", want, err)
+		}
+	}
+	if stored := mgr.MountError(dir); stored == nil {
+		t.Fatal("MountError should store the existing mountpoint conflict")
+	}
+	mgr.mu.Lock()
+	_, registered := mgr.entries[filepath.Clean(dir)]
+	mgr.mu.Unlock()
+	if registered {
+		t.Fatal("mountpoint should not be registered after existing mountpoint conflict")
+	}
+}
+
+func TestAdd_Remote_RegisteredMountpointDoesNotCheckExistingOSMount(t *testing.T) {
+	dir := t.TempDir()
+	oldLookup := lookupOSMountInfoFn
+	called := false
+	lookupOSMountInfoFn = func(mountpoint string) (osMountInfo, bool) {
+		called = true
+		return osMountInfo{}, false
+	}
+	defer func() { lookupOSMountInfoFn = oldLookup }()
+
+	mgr := NewManager()
+	mgr.mu.Lock()
+	mgr.entries[filepath.Clean(dir)] = &entry{
+		remote:     ":s3,env_auth=true:bucket/",
+		mountpoint: filepath.Clean(dir),
+	}
+	mgr.mu.Unlock()
+
+	err := mgr.Add(context.Background(), "test", ":s3,env_auth=true:bucket/", dir, MethodFuse, nil)
+	if err == nil {
+		t.Fatal("expected duplicate mountpoint error")
+	}
+	if !strings.Contains(err.Error(), "already registered") {
+		t.Fatalf("error should mention already registered, got: %v", err)
+	}
+	if called {
+		t.Fatal("registered mountpoint should fail before checking the OS mount table")
+	}
+}
+
 func TestHasFuse(t *testing.T) {
 	t.Parallel()
 	mgr := NewManager()
