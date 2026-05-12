@@ -85,6 +85,125 @@ func TestHandle_LocalKB_SyncNoop(t *testing.T) {
 	}
 }
 
+func TestHandle_LocalKB_BackupDisabled(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"local-kb": {Mount: dir},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "backup"})
+	if err == nil {
+		t.Fatal("expected error when backup is disabled")
+	}
+	if !strings.Contains(err.Error(), "not enabled") {
+		t.Fatalf("error = %q, want backup disabled message", err)
+	}
+}
+
+func TestHandle_LocalKB_BackupCreatesArchiveAndPrunes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "note.md"), "hello")
+	writeTestFile(t, dir+".20260512-130000.backup.tar.gz", "")
+	writeTestFile(t, dir+".20260512-130100.backup.tar.gz", "")
+
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"local-kb": {
+				Mount:  dir,
+				Backup: &config.BackupSettings{Enabled: true, Keep: 2},
+			},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, out, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "backup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.BackupPath == "" {
+		t.Fatal("backup_path should be set")
+	}
+	if !strings.HasSuffix(out.BackupPath, ".backup.tar.gz") {
+		t.Fatalf("backup_path = %q, want .backup.tar.gz suffix", out.BackupPath)
+	}
+	if out.PrunedBackups != 1 {
+		t.Fatalf("pruned_backups = %d, want 1", out.PrunedBackups)
+	}
+	if out.RetainedBackups != 2 {
+		t.Fatalf("retained_backups = %d, want 2", out.RetainedBackups)
+	}
+	if _, err := os.Stat(dir + ".20260512-130000.backup.tar.gz"); !os.IsNotExist(err) {
+		t.Fatalf("oldest backup should be pruned, err=%v", err)
+	}
+}
+
+func TestHandle_LocalKB_RestoreReplacesContents(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "note.md"), "original")
+
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"local-kb": {
+				Mount:  dir,
+				Backup: &config.BackupSettings{Enabled: true, Keep: 3},
+			},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, backupOut, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "backup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(dir, "note.md"), "changed")
+	writeTestFile(t, filepath.Join(dir, "extra.md"), "remove")
+
+	_, restoreOut, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "restore"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restoreOut.RestoredFrom != backupOut.BackupPath {
+		t.Fatalf("restored_from = %q, want %q", restoreOut.RestoredFrom, backupOut.BackupPath)
+	}
+	if !strings.HasSuffix(restoreOut.SafetyBackupPath, ".pre-restore.backup.tar.gz") {
+		t.Fatalf("safety_backup_path = %q, want .pre-restore.backup.tar.gz suffix", restoreOut.SafetyBackupPath)
+	}
+	if got := readTestFile(t, filepath.Join(dir, "note.md")); got != "original" {
+		t.Fatalf("note.md = %q, want original", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "extra.md")); !os.IsNotExist(err) {
+		t.Fatalf("extra.md should be removed, err=%v", err)
+	}
+}
+
+func TestHandle_LocalKB_RestoreMissingBackup(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"local-kb": {
+				Mount:  dir,
+				Backup: &config.BackupSettings{Enabled: true, Keep: 3},
+			},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "local-kb", Action: "restore"})
+	if err == nil {
+		t.Fatal("expected error when no backups exist")
+	}
+	if !strings.Contains(err.Error(), "no backup archives") {
+		t.Fatalf("error = %q, want missing backup message", err)
+	}
+}
+
 func TestHandle_RemoteKB_MountPreflightFails(t *testing.T) {
 	t.Setenv("PATH", "")
 	dir := t.TempDir()
@@ -105,6 +224,32 @@ func TestHandle_RemoteKB_MountPreflightFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "rclone") {
 		t.Fatalf("error = %q, want mention of rclone", err)
+	}
+}
+
+func TestHandle_RemoteKB_BackupRequiresMountedKB(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"remote-kb": {
+				Mount:        dir,
+				RcloneRemote: ":s3:bucket/",
+				Backup:       &config.BackupSettings{Enabled: true, Keep: 3},
+			},
+		},
+	}}
+
+	mgr := mount.NewManager()
+	ctx := config.IntoContext(context.Background(), sc)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{Name: "remote-kb", Action: "backup"})
+	if err == nil {
+		t.Fatal("expected error when remote KB is not mounted")
+	}
+	if !strings.Contains(err.Error(), "not mounted") {
+		t.Fatalf("error = %q, want not mounted message", err)
 	}
 }
 
@@ -296,6 +441,25 @@ func TestHandle_EnvExpansion(t *testing.T) {
 	if out.Mount != expected {
 		t.Fatalf("mount = %q, want %q", out.Mount, expected)
 	}
+}
+
+func writeTestFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readTestFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestHandle_NoMountManager(t *testing.T) {
