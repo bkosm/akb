@@ -47,17 +47,7 @@ make vet
 
 ## Using knowledge bases
 
-Agents interact with KBs using standard file tools on local mount paths.
-
-1. Read the `akb://kbs` resource to discover available KBs, their config fields, resolved mount paths, and this MCP server's local mount status.
-2. Use standard file tools only on KBs whose `mount_status` is `"mounted"`:
-   - Read files: Read tool
-   - Write files: Write tool
-   - Find files: Glob tool
-   - Search content: Grep tool
-3. After writing to a remote-backed KB, call `use_kb` with `action: "sync"` to wait through rclone's write-back window and verify mount health.
-4. Call `new_kb` to create a new knowledge base.
-5. For KBs with backups enabled, call `use_kb` with `action: "backup"` to create a timestamped sibling archive, or `action: "restore"` to replace contents from the latest retained backup.
+The canonical MCP runtime instructions for agents are maintained in [`go/akb/instructions/server.md`](go/akb/instructions/server.md) and embedded into the binary at compile time. Update that file when changing the agent-facing KB workflow, including mount usage, remote sync, backup, restore, and prompt guidance.
 
 **Mount path convention:** for project-scoped KBs, mount at `.akb/<name>` under the repository root and ensure `.akb` is in the repo's `.gitignore`. For global KBs, use `$HOME/.akb/mounts/<name>`.
 
@@ -66,8 +56,6 @@ Do not start multiple AKB server processes with the same remote KB configured to
 KBs can be backed by remote storage (mounted via rclone FUSE/NFS) or plain local directories. `use_kb sync` is timer and mount-health based; it is not a confirmed S3/object-store commit. Remote changes from other hosts may take roughly `poll-interval` / `dir-cache-time` to appear locally. Shared-file writes are last-writer-wins, so use unique append-only files for multi-agent records.
 
 macOS metadata artifacts such as `._*` and `.DS_Store` are disposable. AKB suppresses them where rclone supports it and may remove them from remote mounts before sync/unmount.
-
-Backups are disabled by default. Enable them per KB with `backup_enabled` and optionally set `backup_keep` (defaults to 3). Normal backups are written beside the mount path as `<mount>.YYYYMMDD-HHMMSS.backup.tar.gz`; restore creates a safety archive named `<mount>.YYYYMMDD-HHMMSS.pre-restore.backup.tar.gz` before replacing KB contents. For remote KBs, backup and restore use the mounted path and the same rclone write-back wait semantics as `sync`.
 
 ## Prompts
 
