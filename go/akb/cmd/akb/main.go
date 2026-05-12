@@ -38,6 +38,7 @@ Workflow:
   2. Use standard file tools (Read, Write, Glob, Grep) only on KBs whose mount_status is "mounted".
   3. After writing to a remote-backed KB, call use_kb with action "sync" to wait for rclone's write-back window and verify mount health.
   4. Use new_kb to register additional knowledge bases (local directories or remote storage).
+  5. For KBs with backup.enabled=true, call use_kb with action "backup" to create a retained sibling archive, or action "restore" to replace contents from the latest retained backup.
 
 Two independent dimensions:
   - Config backend: where the KB registry (list of KBs) is stored — either a local file or an S3 object.
@@ -60,7 +61,17 @@ Mount path convention:
   (S3), always use env var prefixes like $HOME instead of bare absolute paths so configs stay
   portable across developers and machines. Local config backends can use absolute paths.
 
-The use_kb tool is used for troubleshooting and remote write safety — e.g. re-mounting a KB that failed at startup, manually unmounting to free resources, or action "sync" after writes to a remote KB.
+The use_kb tool is used for troubleshooting, remote write safety, and KB backups — e.g. re-mounting a KB that failed at startup, manually unmounting to free resources, action "sync" after writes to a remote KB, action "backup" to create a timestamped archive, or action "restore" to restore from the latest retained backup.
+
+Backup workflow:
+  - Backups are disabled by default. Enable them per KB with backup_enabled when creating or patching a KB; backup_keep defaults to 3.
+  - use_kb action "backup" writes a compressed sibling archive outside the mount tree: <mount>.YYYYMMDD-HHMMSS.backup.tar.gz.
+  - After a successful backup, older normal backup archives are pruned so only backup.keep newest normal backups remain.
+  - use_kb action "restore" first creates a safety archive of current contents: <mount>.YYYYMMDD-HHMMSS.pre-restore.backup.tar.gz.
+  - Restore then deletes entries inside the KB root and extracts the latest retained normal backup into the KB root.
+  - A pre-restore safety archive is a manual rollback point for undoing the restore that just happened; it is only useful after restore has replaced the KB contents.
+  - use_kb action "restore" never selects pre-restore safety archives automatically, and normal backup retention does not prune them.
+  - For remote KBs, backup requires the KB to be mounted, waits for rclone write-back before archiving, and restore waits for rclone write-back after extraction.
 
 Remote KB durability contract:
   - use_kb action "sync" is timer and mount-health based; it is not a confirmed S3/object-store commit.
