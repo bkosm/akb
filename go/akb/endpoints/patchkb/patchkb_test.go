@@ -29,6 +29,8 @@ func (s *stubConfigurer) Save(_ context.Context, cfg config.Config) error {
 }
 
 func strPtr(s string) *string { return &s }
+func boolPtr(b bool) *bool    { return &b }
+func intPtr(i int) *int       { return &i }
 
 func TestEditKB_Description(t *testing.T) {
 	t.Parallel()
@@ -152,6 +154,90 @@ func TestEditKB_RcloneArgs(t *testing.T) {
 	}
 	if _, old := got["vfs-cache-mode"]; old {
 		t.Fatal("rclone_args should be fully replaced, old key should be gone")
+	}
+}
+
+func TestEditKB_BackupEnabledDefaultsKeep(t *testing.T) {
+	t.Parallel()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {Mount: "/tmp/kb"},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:          "my-kb",
+		BackupEnabled: boolPtr(true),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := sc.saved.KBs["my-kb"].Backup
+	if backup == nil {
+		t.Fatal("backup settings should be persisted")
+	}
+	if !backup.Enabled {
+		t.Fatal("backup should be enabled")
+	}
+	if backup.Keep != config.DefaultBackupKeep {
+		t.Fatalf("backup keep = %d, want %d", backup.Keep, config.DefaultBackupKeep)
+	}
+}
+
+func TestEditKB_BackupKeepPreservesEnabled(t *testing.T) {
+	t.Parallel()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {
+				Mount:  "/tmp/kb",
+				Backup: &config.BackupSettings{Enabled: true, Keep: 2},
+			},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:       "my-kb",
+		BackupKeep: intPtr(5),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := sc.saved.KBs["my-kb"].Backup
+	if backup == nil {
+		t.Fatal("backup settings should be preserved")
+	}
+	if !backup.Enabled {
+		t.Fatal("backup enabled should be preserved")
+	}
+	if backup.Keep != 5 {
+		t.Fatalf("backup keep = %d, want 5", backup.Keep)
+	}
+}
+
+func TestEditKB_BackupDisabledWithoutKeepOmitsSettings(t *testing.T) {
+	t.Parallel()
+	sc := &stubConfigurer{cfg: config.Config{
+		KBs: map[config.Unique]config.KB{
+			"my-kb": {
+				Mount:  "/tmp/kb",
+				Backup: &config.BackupSettings{Enabled: true, Keep: 2},
+			},
+		},
+	}}
+	ctx := config.IntoContext(context.Background(), sc)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:          "my-kb",
+		BackupEnabled: boolPtr(false),
+		BackupKeep:    intPtr(0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sc.saved.KBs["my-kb"].Backup != nil {
+		t.Fatalf("backup settings = %#v, want nil", sc.saved.KBs["my-kb"].Backup)
 	}
 }
 

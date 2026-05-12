@@ -64,8 +64,12 @@ func TestHandler_WithKBs(t *testing.T) {
 	ctx := config.IntoContext(context.Background(), &stubConfigurer{
 		cfg: config.Config{
 			KBs: map[config.Unique]config.KB{
-				"beta":  {Mount: dir, Description: "Beta KB"},
-				"alpha": {Mount: dir, Description: "Alpha KB"},
+				"beta": {Mount: dir, Description: "Beta KB"},
+				"alpha": {
+					Mount:       dir,
+					Description: "Alpha KB",
+					Backup:      &config.BackupSettings{Enabled: true, Keep: 4},
+				},
 			},
 		},
 	})
@@ -86,6 +90,12 @@ func TestHandler_WithKBs(t *testing.T) {
 	}
 	if kbMap["alpha"].Description != "Alpha KB" {
 		t.Fatalf("description = %q", kbMap["alpha"].Description)
+	}
+	if kbMap["alpha"].Backup == nil {
+		t.Fatal("backup settings should be exposed")
+	}
+	if kbMap["alpha"].Backup.Keep != 4 {
+		t.Fatalf("backup keep = %d, want 4", kbMap["alpha"].Backup.Keep)
 	}
 }
 

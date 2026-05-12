@@ -21,6 +21,30 @@ type KB struct {
 	Method       string            `json:"mount_method,omitempty"` // "fuse", "nfs", or "" (auto: prefer FUSE, fall back to NFS)
 	RcloneArgs   map[string]string `json:"rclone_args,omitempty"`  // flag overrides keyed by flag name without "--"; empty value for boolean flags
 	Description  string            `json:"description,omitempty"`
+	Backup       *BackupSettings   `json:"backup,omitempty"`
+}
+
+const DefaultBackupKeep = 3
+
+// BackupSettings controls timestamped sibling archives for a KB.
+type BackupSettings struct {
+	Enabled bool `json:"enabled"`
+	Keep    int  `json:"keep,omitempty"`
+}
+
+// NormalizeBackup applies config defaults and omits disabled empty settings.
+func NormalizeBackup(settings *BackupSettings) *BackupSettings {
+	if settings == nil {
+		return nil
+	}
+	normalized := *settings
+	if normalized.Enabled && normalized.Keep <= 0 {
+		normalized.Keep = DefaultBackupKeep
+	}
+	if !normalized.Enabled && normalized.Keep <= 0 {
+		return nil
+	}
+	return &normalized
 }
 
 // Config is the top-level configuration structure persisted by the config backend.

@@ -66,6 +66,85 @@ func TestHandle_createsLocalKB(t *testing.T) {
 	if entry.RcloneRemote != "" {
 		t.Fatalf("RcloneRemote = %q, want empty", entry.RcloneRemote)
 	}
+	if entry.Backup != nil {
+		t.Fatalf("Backup = %#v, want nil when disabled", entry.Backup)
+	}
+}
+
+func TestHandle_createsKBWithBackupDefaults(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	kbDir := filepath.Join(dir, "mykb")
+	if err := os.MkdirAll(kbDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configurer := &configlocalfs.LocalFS{Path: cfgPath}
+	mgr := mount.NewManager()
+	ctx := config.IntoContext(context.Background(), configurer)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:          "my-kb",
+		Mount:         kbDir,
+		BackupEnabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := configurer.Retrieve(context.Background())
+	if err != nil {
+		t.Fatalf("Retrieve: %v", err)
+	}
+	backup := cfg.KBs["my-kb"].Backup
+	if backup == nil {
+		t.Fatal("Backup should be persisted when enabled")
+	}
+	if !backup.Enabled {
+		t.Fatal("Backup.Enabled should be true")
+	}
+	if backup.Keep != config.DefaultBackupKeep {
+		t.Fatalf("Backup.Keep = %d, want %d", backup.Keep, config.DefaultBackupKeep)
+	}
+}
+
+func TestHandle_createsKBWithBackupKeep(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	kbDir := filepath.Join(dir, "mykb")
+	if err := os.MkdirAll(kbDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configurer := &configlocalfs.LocalFS{Path: cfgPath}
+	mgr := mount.NewManager()
+	ctx := config.IntoContext(context.Background(), configurer)
+	ctx = mount.ManagerIntoContext(ctx, mgr)
+
+	_, _, err := Handle(ctx, &mcp.CallToolRequest{}, Input{
+		Name:          "my-kb",
+		Mount:         kbDir,
+		BackupEnabled: true,
+		BackupKeep:    7,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := configurer.Retrieve(context.Background())
+	if err != nil {
+		t.Fatalf("Retrieve: %v", err)
+	}
+	backup := cfg.KBs["my-kb"].Backup
+	if backup == nil {
+		t.Fatal("Backup should be persisted when enabled")
+	}
+	if backup.Keep != 7 {
+		t.Fatalf("Backup.Keep = %d, want 7", backup.Keep)
+	}
 }
 
 func TestHandle_duplicateName(t *testing.T) {

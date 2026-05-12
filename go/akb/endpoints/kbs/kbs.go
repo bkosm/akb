@@ -141,6 +141,7 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		Title: "Knowledge Bases",
 		Description: `Knowledge bases with config, resolved mount paths, and live mount status (name as key):
   - resolved_mount_path: expanded, absolute path to use with file tools (Read, Write, Glob, Grep)
+  - backup: optional backup settings; enabled controls use_kb backup/restore and keep controls retained archives
   - mount_status: "mounted", "not_mounted", or "failed" — live state from the mount manager
   - mount_error: present only when mount_status is "failed"
   - resolved_mount_method: concrete remote mount method selected by the mount manager ("fuse" or "nfs")

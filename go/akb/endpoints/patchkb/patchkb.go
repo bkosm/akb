@@ -11,12 +11,14 @@ import (
 
 // Input holds the parameters for the patch_kb tool.
 type Input struct {
-	Name         string            `json:"name" jsonschema:"the config key of the KB entry to edit"`
-	RcloneRemote *string           `json:"rclone_remote,omitempty" jsonschema:"new rclone remote path spec. Set empty string to switch to plain local mode. Format ':backend,opt=val:bucket/path'. See https://rclone.org/overview/#syntax-of-remote-paths"`
-	Mount        *string           `json:"mount,omitempty" jsonschema:"new local mount path. For project-scoped KBs, prefer .akb/<name> under the repository root. Use env var prefixes like $HOME for portability when using a remote config backend. For global KBs, use $HOME/.akb/mounts/<name>."`
-	Method       *string           `json:"mount_method,omitempty" jsonschema:"mount strategy: 'fuse' (requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE), or empty string for auto. Ignored for local directories."`
-	RcloneArgs   map[string]string `json:"rclone_args,omitempty" jsonschema:"rclone flag overrides keyed by flag name without '--'. Replaces the entire rclone_args map when provided. See https://rclone.org/commands/rclone_mount/#options"`
-	Description  *string           `json:"description,omitempty" jsonschema:"new description for the KB"`
+	Name          string            `json:"name" jsonschema:"the config key of the KB entry to edit"`
+	RcloneRemote  *string           `json:"rclone_remote,omitempty" jsonschema:"new rclone remote path spec. Set empty string to switch to plain local mode. Format ':backend,opt=val:bucket/path'. See https://rclone.org/overview/#syntax-of-remote-paths"`
+	Mount         *string           `json:"mount,omitempty" jsonschema:"new local mount path. For project-scoped KBs, prefer .akb/<name> under the repository root. Use env var prefixes like $HOME for portability when using a remote config backend. For global KBs, use $HOME/.akb/mounts/<name>."`
+	Method        *string           `json:"mount_method,omitempty" jsonschema:"mount strategy: 'fuse' (requires macFUSE/FUSE-T/fuse3), 'nfs' (rclone nfsmount, no FUSE), or empty string for auto. Ignored for local directories."`
+	RcloneArgs    map[string]string `json:"rclone_args,omitempty" jsonschema:"rclone flag overrides keyed by flag name without '--'. Replaces the entire rclone_args map when provided. See https://rclone.org/commands/rclone_mount/#options"`
+	Description   *string           `json:"description,omitempty" jsonschema:"new description for the KB"`
+	BackupEnabled *bool             `json:"backup_enabled,omitempty" jsonschema:"enable or disable timestamped sibling backup archives for this KB"`
+	BackupKeep    *int              `json:"backup_keep,omitempty" jsonschema:"number of newest backup archives to retain when backups are enabled; defaults to 3"`
 }
 
 // Output is the response payload for the patch_kb tool.
@@ -71,6 +73,23 @@ func editKB(cfg *config.Config, input Input) error {
 	if input.RcloneArgs != nil {
 		entry.RcloneArgs = input.RcloneArgs
 	}
+	if input.BackupEnabled != nil || input.BackupKeep != nil {
+		if input.BackupEnabled != nil && !*input.BackupEnabled {
+			entry.Backup = nil
+		} else {
+			backup := config.BackupSettings{}
+			if entry.Backup != nil {
+				backup = *entry.Backup
+			}
+			if input.BackupEnabled != nil {
+				backup.Enabled = *input.BackupEnabled
+			}
+			if input.BackupKeep != nil {
+				backup.Keep = *input.BackupKeep
+			}
+			entry.Backup = config.NormalizeBackup(&backup)
+		}
+	}
 
 	cfg.KBs[key] = entry
 	return nil
@@ -83,7 +102,7 @@ var Register endpoints.RegisterFunc = func(_ context.Context, s *mcp.Server) err
 		Title: "Update KB Configuration",
 		Description: `Merge-patch a knowledge base config entry.
 
-Only provided fields are updated; omitted fields are preserved. Works for KB settings: rclone_remote, mount path, mount method, rclone args, description.
+Only provided fields are updated; omitted fields are preserved. Works for KB settings: rclone_remote, mount path, mount method, rclone args, description, backup_enabled, backup_keep.
 
 Changes are persisted immediately but take full effect after MCP server restart.`,
 		Annotations: &mcp.ToolAnnotations{
