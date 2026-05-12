@@ -57,6 +57,7 @@ Agents interact with KBs using standard file tools on local mount paths.
    - Search content: Grep tool
 3. After writing to a remote-backed KB, call `use_kb` with `action: "sync"` to wait through rclone's write-back window and verify mount health.
 4. Call `new_kb` to create a new knowledge base.
+5. For KBs with backups enabled, call `use_kb` with `action: "backup"` to create a timestamped sibling archive, or `action: "restore"` to replace contents from the latest retained backup.
 
 **Mount path convention:** for project-scoped KBs, mount at `.akb/<name>` under the repository root and ensure `.akb` is in the repo's `.gitignore`. For global KBs, use `$HOME/.akb/mounts/<name>`.
 
@@ -65,6 +66,8 @@ Do not start multiple AKB server processes with the same remote KB configured to
 KBs can be backed by remote storage (mounted via rclone FUSE/NFS) or plain local directories. `use_kb sync` is timer and mount-health based; it is not a confirmed S3/object-store commit. Remote changes from other hosts may take roughly `poll-interval` / `dir-cache-time` to appear locally. Shared-file writes are last-writer-wins, so use unique append-only files for multi-agent records.
 
 macOS metadata artifacts such as `._*` and `.DS_Store` are disposable. AKB suppresses them where rclone supports it and may remove them from remote mounts before sync/unmount.
+
+Backups are disabled by default. Enable them per KB with `backup_enabled` and optionally set `backup_keep` (defaults to 3). Normal backups are written beside the mount path as `<mount>.YYYYMMDD-HHMMSS.backup.tar.gz`; restore creates a safety archive named `<mount>.YYYYMMDD-HHMMSS.pre-restore.backup.tar.gz` before replacing KB contents. For remote KBs, backup and restore use the mounted path and the same rclone write-back wait semantics as `sync`.
 
 ## Prompts
 
@@ -127,6 +130,7 @@ Each KB in config has these fields:
 - `mount` — local directory path (FUSE/NFS mountpoint when remote, or plain local dir)
 - `mount_method` (optional) — `"fuse"`, `"nfs"`, or empty for auto (prefer FUSE, fall back to NFS)
 - `rclone_args` (optional) — `map[string]string` flag overrides merged on top of defaults; `daemon` is not supported because AKB tracks rclone as a child process
+- `backup` (optional) — backup settings with `enabled` and retained archive count `keep`
 - `description` (optional) — human-readable description
 
 When `rclone_remote` is set, the mount manager starts `rclone mount` or `rclone nfsmount` depending on the resolved mount method. When empty, `mount` is used as a plain local directory. See [README.md](README.md) for rclone installation caveats and mount method details.

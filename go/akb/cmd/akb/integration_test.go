@@ -171,6 +171,90 @@ func TestIntegration_UseKB_LocalNoop(t *testing.T) {
 	}
 }
 
+func TestIntegration_UseKB_LocalBackupRestore(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	kbDir := t.TempDir()
+
+	session, cleanup := startServer(t, configPath)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "new_kb",
+		Arguments: map[string]any{
+			"name":           "test-kb",
+			"mount":          kbDir,
+			"backup_enabled": true,
+			"backup_keep":    2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new_kb: %v", err)
+	}
+
+	notePath := filepath.Join(kbDir, "note.md")
+	if err := os.WriteFile(notePath, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	backupResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "use_kb",
+		Arguments: map[string]any{
+			"name":   "test-kb",
+			"action": "backup",
+		},
+	})
+	if err != nil {
+		t.Fatalf("use_kb backup: %v", err)
+	}
+	if backupResult.IsError {
+		t.Fatalf("use_kb backup error: %v", backupResult.Content)
+	}
+	if text := extractText(t, backupResult); !strings.Contains(text, ".backup.tar.gz") {
+		t.Fatalf("expected backup archive path, got: %s", text)
+	}
+
+	if err := os.WriteFile(notePath, []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(kbDir, "extra.md"), []byte("remove"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	restoreResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "use_kb",
+		Arguments: map[string]any{
+			"name":   "test-kb",
+			"action": "restore",
+		},
+	})
+	if err != nil {
+		t.Fatalf("use_kb restore: %v", err)
+	}
+	if restoreResult.IsError {
+		t.Fatalf("use_kb restore error: %v", restoreResult.Content)
+	}
+
+	restored, err := os.ReadFile(notePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(restored) != "original" {
+		t.Fatalf("note.md = %q, want original", restored)
+	}
+	if _, err := os.Stat(filepath.Join(kbDir, "extra.md")); !os.IsNotExist(err) {
+		t.Fatalf("extra.md should be removed, err=%v", err)
+	}
+	safetyArchives, err := filepath.Glob(kbDir + ".*.pre-restore.backup.tar.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(safetyArchives) != 1 {
+		t.Fatalf("expected 1 pre-restore archive, got %d: %#v", len(safetyArchives), safetyArchives)
+	}
+}
+
 // extractText returns the text content from the first TextContent in a CallToolResult.
 func extractText(t *testing.T, result *mcp.CallToolResult) string {
 	t.Helper()

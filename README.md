@@ -82,6 +82,10 @@ Each KB entry in the config has these fields:
     "vfs-cache-max-size": "5G",
     "read-only": ""
   },
+  "backup": {
+    "enabled": true,
+    "keep": 3
+  },
   "description": "My knowledge base"
 }
 ```
@@ -92,6 +96,7 @@ Each KB entry in the config has these fields:
 | `rclone_remote` | no | rclone remote spec. Omit for a plain local directory. Format: `:backend,opt=val:bucket/path`. See [rclone docs](https://rclone.org/overview/#syntax-of-remote-paths). |
 | `mount_method` | no | `"fuse"`, `"nfs"`, or omit for auto. |
 | `rclone_args` | no | Flag overrides as `{"flag-name": "value"}` (without `--` prefix). Empty value for boolean flags. Merged on top of defaults. |
+| `backup` | no | Backup settings. `enabled` defaults to `false`; `keep` defaults to `3` when backups are enabled. |
 | `description` | no | Human-readable description. |
 
 All KB config fields (`mount`, `rclone_remote`, `rclone_args`) support `$ENV_VAR` expansion at runtime. When using a remote config backend (S3), always use env var prefixes (e.g. `$HOME`) instead of bare absolute paths so configs stay portable across developers and machines. Local config backends can use absolute paths.
@@ -158,6 +163,26 @@ These are applied to every mount unless overridden via `rclone_args`:
 On macOS, AKB also passes rclone's Apple metadata suppression flags where supported (`noappledouble`, `noapplexattr`) and removes disposable `._*` / `.DS_Store` artifacts before remote sync and graceful unmount.
 
 AKB runs rclone as a tracked child process, so `daemon` is not supported in `rclone_args`.
+
+### KB backups
+
+Backups are disabled by default. Enable them when creating or patching a KB with `backup_enabled: true`; set `backup_keep` to control how many normal backup archives are retained.
+
+`use_kb` with `action: "backup"` writes a compressed sibling archive next to the mount path, not inside it:
+
+```text
+/path/to/kb.20260512-130000.backup.tar.gz
+```
+
+After a successful backup, AKB prunes older normal backup archives and keeps the newest `backup.keep` files. Backup archives include dotfiles but skip disposable macOS metadata files such as `.DS_Store` and `._*`.
+
+`use_kb` with `action: "restore"` restores from the latest retained normal backup. Before replacing contents, it creates a safety archive of the current KB contents:
+
+```text
+/path/to/kb.20260512-130500.pre-restore.backup.tar.gz
+```
+
+Restore deletes entries inside the KB root and then extracts the archive. For remote KBs, backup requires the KB to be mounted, waits for rclone write-back before archiving, and restore waits for rclone write-back after extracting. As with `sync`, this wait verifies the local mount process and write-back window; it is not a confirmed object-store commit.
 
 ## Prompts
 
